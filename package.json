@@ -1,0 +1,25 @@
+{
+  "name": "gcal-timeslot-generator",
+  "version": "0.1.0",
+  "description": "Google Apps Script web app that reads your Google Calendar and generates copyable time slots for emails",
+  "private": true,
+  "scripts": {
+    "clean": "rm -rf dist",
+    "build": "npm run clean && rollup -c rollup.config.mjs",
+    "login": "npx @google/clasp login --no-localhost",
+    "push": "npm run build && npx @google/clasp push --force",
+    "deploy": "npm run push && npx @google/clasp deploy",
+    "open": "npx @google/clasp open --webapp",
+    "watch": "rollup -c rollup.config.mjs --watch"
+  },
+  "devDependencies": {
+    "@google/clasp": "^2.4.2",
+    "@rollup/plugin-node-resolve": "^16.0.0",
+    "@rollup/plugin-typescript": "^12.1.0",
+    "@types/google-apps-script": "^1.0.83",
+    "rollup": "^4.28.0",
+    "rollup-plugin-copy": "^3.5.0",
+    "tslib": "^2.8.0",
+    "typescript": "^5.7.0"
+  }
+}

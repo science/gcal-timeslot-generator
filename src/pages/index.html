@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      --primary: #1a73e8;
+      --primary-hover: #1557b0;
+      --success: #0d904f;
+      --bg: #f8f9fa;
+      --card-bg: #ffffff;
+      --border: #dadce0;
+      --text: #202124;
+      --text-secondary: #5f6368;
+      --slot-bg: #e8f0fe;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Google Sans', 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      padding: 16px;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      font-size: 20px;
+      font-weight: 500;
+      margin-bottom: 16px;
+    }
+
+    .controls {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+
+    .controls label {
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .controls select, .controls input {
+      padding: 6px 10px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-size: 14px;
+      background: var(--card-bg);
+    }
+
+    .day-group {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 12px;
+      overflow: hidden;
+    }
+
+    .day-header {
+      padding: 10px 14px;
+      font-weight: 500;
+      font-size: 14px;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .day-header input[type="checkbox"] {
+      accent-color: var(--primary);
+    }
+
+    .slot-item {
+      padding: 8px 14px 8px 36px;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-bottom: 1px solid var(--bg);
+    }
+
+    .slot-item:last-child { border-bottom: none; }
+
+    .slot-item input[type="checkbox"] {
+      accent-color: var(--primary);
+    }
+
+    .slot-time {
+      background: var(--slot-bg);
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-family: 'Roboto Mono', monospace;
+      font-size: 13px;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      margin: 16px 0;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      padding: 10px 24px;
+      border: none;
+      border-radius: 4px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+    }
+
+    .btn-primary:hover { background: var(--primary-hover); }
+
+    .btn-primary.copied {
+      background: var(--success);
+    }
+
+    .btn-secondary {
+      background: var(--card-bg);
+      color: var(--primary);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover { background: var(--bg); }
+
+    .preview {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+      font-size: 13px;
+      font-family: 'Roboto Mono', monospace;
+      white-space: pre-wrap;
+      color: var(--text-secondary);
+      max-height: 300px;
+      overflow-y: auto;
+    }
+
+    .preview-label {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 40px;
+      color: var(--text-secondary);
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 24px;
+      height: 24px;
+      border: 3px solid var(--border);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-bottom: 8px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px;
+      color: var(--text-secondary);
+      font-size: 14px;
+    }
+
+    .error {
+      background: #fce8e6;
+      color: #c5221f;
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      margin-bottom: 12px;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Time Slot Generator</h1>
+
+<div class="controls">
+  <div>
+    <label for="numDays">Days:</label>
+    <select id="numDays">
+      <option value="3">3 days</option>
+      <option value="5" selected>5 days</option>
+      <option value="10">10 days</option>
+    </select>
+  </div>
+  <div>
+    <label for="formatStyle">Format:</label>
+    <select id="formatStyle">
+      <option value="bullets" selected>Bullets</option>
+      <option value="compact">Compact</option>
+    </select>
+  </div>
+  <button class="btn btn-secondary" onclick="loadSlots()">Refresh</button>
+</div>
+
+<div id="content">
+  <div class="loading">
+    <div class="spinner"></div>
+    <div>Loading your availability...</div>
+  </div>
+</div>
+
+<div class="actions">
+  <button id="copyBtn" class="btn btn-primary" onclick="copyToClipboard()" disabled>
+    Copy to Clipboard
+  </button>
+</div>
+
+<div class="preview-label">Preview</div>
+<div id="preview" class="preview">Loading...</div>
+
+<script>
+  var allSlots = [];
+
+  function loadSlots() {
+    var numDays = parseInt(document.getElementById('numDays').value, 10);
+    document.getElementById('content').innerHTML =
+      '<div class="loading"><div class="spinner"></div><div>Loading your availability...</div></div>';
+    document.getElementById('preview').textContent = 'Loading...';
+    document.getElementById('copyBtn').disabled = true;
+
+    google.script.run
+      .withSuccessHandler(onSlotsLoaded)
+      .withFailureHandler(onError)
+      .getSlots({ numDays: numDays });
+  }
+
+  function onSlotsLoaded(days) {
+    allSlots = days;
+    renderSlots();
+  }
+
+  function onError(err) {
+    document.getElementById('content').innerHTML =
+      '<div class="error">Error loading calendar: ' + err.message + '</div>';
+    document.getElementById('preview').textContent = 'Error';
+  }
+
+  function renderSlots() {
+    var container = document.getElementById('content');
+
+    if (allSlots.length === 0) {
+      container.innerHTML = '<div class="empty-state">No availability found. Your calendar is fully booked!</div>';
+      updatePreview();
+      return;
+    }
+
+    var html = '';
+    for (var d = 0; d < allSlots.length; d++) {
+      var day = allSlots[d];
+      html += '<div class="day-group">';
+      html += '<div class="day-header">';
+      html += '<input type="checkbox" checked data-day="' + d + '" onchange="toggleDay(' + d + ')">';
+      html += '<span>' + day.dayLabel + '</span>';
+      html += '</div>';
+      for (var s = 0; s < day.slots.length; s++) {
+        var slot = day.slots[s];
+        html += '<div class="slot-item">';
+        html += '<input type="checkbox" checked data-day="' + d + '" data-slot="' + s + '" onchange="updatePreview()">';
+        html += '<span class="slot-time">' + fmtTime(slot.start) + ' - ' + fmtTime(slot.end) + '</span>';
+        html += '</div>';
+      }
+      html += '</div>';
+    }
+
+    container.innerHTML = html;
+    document.getElementById('copyBtn').disabled = false;
+    updatePreview();
+  }
+
+  function toggleDay(dayIndex) {
+    var dayCheckbox = document.querySelector('[data-day="' + dayIndex + '"]:not([data-slot])');
+    var slotCheckboxes = document.querySelectorAll('[data-day="' + dayIndex + '"][data-slot]');
+    for (var i = 0; i < slotCheckboxes.length; i++) {
+      slotCheckboxes[i].checked = dayCheckbox.checked;
+    }
+    updatePreview();
+  }
+
+  function getSelectedSlots() {
+    var selected = [];
+    for (var d = 0; d < allSlots.length; d++) {
+      var daySlots = [];
+      for (var s = 0; s < allSlots[d].slots.length; s++) {
+        var cb = document.querySelector('[data-day="' + d + '"][data-slot="' + s + '"]');
+        if (cb && cb.checked) {
+          daySlots.push(allSlots[d].slots[s]);
+        }
+      }
+      if (daySlots.length > 0) {
+        selected.push({
+          date: allSlots[d].date,
+          dayLabel: allSlots[d].dayLabel,
+          slots: daySlots
+        });
+      }
+    }
+    return selected;
+  }
+
+  function updatePreview() {
+    var selected = getSelectedSlots();
+    var style = document.getElementById('formatStyle').value;
+    var text = formatLocal(selected, style);
+    document.getElementById('preview').textContent = text;
+    document.getElementById('copyBtn').disabled = selected.length === 0;
+  }
+
+  function formatLocal(days, style) {
+    if (days.length === 0) return 'No slots selected.';
+    if (style === 'compact') return formatCompact(days);
+    return formatBullets(days);
+  }
+
+  function formatBullets(days) {
+    var lines = ['I\'m available at the following times (Pacific):', ''];
+    for (var d = 0; d < days.length; d++) {
+      lines.push(days[d].dayLabel + ':');
+      for (var s = 0; s < days[d].slots.length; s++) {
+        var sl = days[d].slots[s];
+        lines.push('  - ' + fmtTime(sl.start) + ' - ' + fmtTime(sl.end));
+      }
+      if (d < days.length - 1) lines.push('');
+    }
+    return lines.join('\n');
+  }
+
+  function formatCompact(days) {
+    var lines = ['Available (Pacific):'];
+    for (var d = 0; d < days.length; d++) {
+      var parts = [];
+      for (var s = 0; s < days[d].slots.length; s++) {
+        var sl = days[d].slots[s];
+        parts.push(fmtTime(sl.start) + '-' + fmtTime(sl.end));
+      }
+      lines.push(days[d].dayLabel + ': ' + parts.join(', '));
+    }
+    return lines.join('\n');
+  }
+
+  function fmtTime(iso) {
+    var date = new Date(iso);
+    var hours = date.getHours();
+    var minutes = date.getMinutes();
+    var ampm = hours >= 12 ? 'pm' : 'am';
+    hours = hours % 12 || 12;
+    var minuteStr = minutes === 0 ? '' : ':' + String(minutes).padStart(2, '0');
+    return hours + minuteStr + ampm;
+  }
+
+  function copyToClipboard() {
+    var text = document.getElementById('preview').textContent;
+    var btn = document.getElementById('copyBtn');
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function() {
+        showCopied(btn);
+      }, function() {
+        fallbackCopy(text, btn);
+      });
+    } else {
+      fallbackCopy(text, btn);
+    }
+  }
+
+  function fallbackCopy(text, btn) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      document.execCommand('copy');
+      showCopied(btn);
+    } catch (e) {
+      btn.textContent = 'Copy failed';
+    }
+    document.body.removeChild(ta);
+  }
+
+  function showCopied(btn) {
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(function() {
+      btn.textContent = 'Copy to Clipboard';
+      btn.classList.remove('copied');
+    }, 2000);
+  }
+
+  // Re-render preview when format changes
+  document.getElementById('formatStyle').addEventListener('change', updatePreview);
+
+  // Initial load
+  loadSlots();
+</script>
+
+</body>
+</html>
