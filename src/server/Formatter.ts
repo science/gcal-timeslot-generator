@@ -1,6 +1,6 @@
 import type { DaySlots, FormatStyle } from "../shared/types";
 
-function formatTime(isoString: string): string {
+export function formatTime(isoString: string): string {
   const date = new Date(isoString);
   let hours = date.getHours();
   const minutes = date.getMinutes();
@@ -10,7 +10,7 @@ function formatTime(isoString: string): string {
   return `${hours}${minuteStr}${ampm}`;
 }
 
-function formatSlotsBullets(days: DaySlots[]): string {
+export function formatSlotsBullets(days: DaySlots[]): string {
   if (days.length === 0) return "No availability found for the selected period.";
 
   const lines: string[] = ["I'm available at the following times (Pacific):", ""];
@@ -26,7 +26,7 @@ function formatSlotsBullets(days: DaySlots[]): string {
   return lines.join("\n");
 }
 
-function formatSlotsCompact(days: DaySlots[]): string {
+export function formatSlotsCompact(days: DaySlots[]): string {
   if (days.length === 0) return "No availability found for the selected period.";
 
   const lines: string[] = ["Available (Pacific):"];

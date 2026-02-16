@@ -32,6 +32,10 @@
     h1 {
       font-size: 20px;
       font-weight: 500;
+      margin-bottom: 12px;
+    }
+
+    .copy-bar {
       margin-bottom: 16px;
     }
 
@@ -39,7 +43,7 @@
       display: flex;
       gap: 12px;
       align-items: center;
-      margin-bottom: 16px;
+      margin-bottom: 12px;
       flex-wrap: wrap;
     }
 
@@ -48,11 +52,54 @@
       color: var(--text-secondary);
     }
 
-    .controls select, .controls input {
+    .controls select, .controls input[type="number"] {
       padding: 6px 10px;
       border: 1px solid var(--border);
       border-radius: 4px;
       font-size: 14px;
+      background: var(--card-bg);
+    }
+
+    .controls .checkbox-control {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .controls .checkbox-control input[type="checkbox"] {
+      accent-color: var(--primary);
+    }
+
+    details.advanced {
+      margin-bottom: 16px;
+    }
+
+    details.advanced summary {
+      font-size: 13px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      margin-bottom: 8px;
+    }
+
+    .advanced-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px 16px;
+      font-size: 13px;
+    }
+
+    .advanced-grid label {
+      color: var(--text-secondary);
+      display: block;
+      margin-bottom: 2px;
+    }
+
+    .advanced-grid select {
+      width: 100%;
+      padding: 4px 8px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-size: 13px;
       background: var(--card-bg);
     }
 
@@ -100,13 +147,6 @@
       border-radius: 4px;
       font-family: 'Roboto Mono', monospace;
       font-size: 13px;
-    }
-
-    .actions {
-      display: flex;
-      gap: 10px;
-      margin: 16px 0;
-      flex-wrap: wrap;
     }
 
     .btn {
@@ -199,6 +239,12 @@
 
 <h1>Time Slot Generator</h1>
 
+<div class="copy-bar">
+  <button id="copyBtn" class="btn btn-primary" onclick="copyToClipboard()" disabled>
+    Copy to Clipboard
+  </button>
+</div>
+
 <div class="controls">
   <div>
     <label for="numDays">Days:</label>
@@ -209,14 +255,70 @@
     </select>
   </div>
   <div>
+    <label for="timezone">Timezone:</label>
+    <select id="timezone">
+      <option value="America/Los_Angeles" selected>Pacific</option>
+      <option value="America/Denver">Mountain</option>
+      <option value="America/Chicago">Central</option>
+      <option value="America/New_York">Eastern</option>
+    </select>
+  </div>
+  <div>
     <label for="formatStyle">Format:</label>
     <select id="formatStyle">
-      <option value="bullets" selected>Bullets</option>
-      <option value="compact">Compact</option>
+      <option value="bullets">Bullets</option>
+      <option value="compact" selected>Compact</option>
     </select>
+  </div>
+  <div class="checkbox-control">
+    <input type="checkbox" id="includeToday">
+    <label for="includeToday">Include today</label>
   </div>
   <button class="btn btn-secondary" onclick="loadSlots()">Refresh</button>
 </div>
+
+<details class="advanced">
+  <summary>Advanced settings</summary>
+  <div class="advanced-grid">
+    <div>
+      <label for="startHour">Start hour</label>
+      <select id="startHour">
+        <option value="7">7am</option>
+        <option value="8">8am</option>
+        <option value="9" selected>9am</option>
+        <option value="10">10am</option>
+      </select>
+    </div>
+    <div>
+      <label for="endHour">End hour</label>
+      <select id="endHour">
+        <option value="16">4pm</option>
+        <option value="17" selected>5pm</option>
+        <option value="18">6pm</option>
+        <option value="19">7pm</option>
+      </select>
+    </div>
+    <div>
+      <label for="maxBlock">Max meeting block</label>
+      <select id="maxBlock">
+        <option value="0">Off</option>
+        <option value="60">1h</option>
+        <option value="90">1.5h</option>
+        <option value="120" selected>2h</option>
+        <option value="180">3h</option>
+      </select>
+    </div>
+    <div>
+      <label for="breakAfter">Break after</label>
+      <select id="breakAfter">
+        <option value="15">15 min</option>
+        <option value="30" selected>30 min</option>
+        <option value="45">45 min</option>
+        <option value="60">60 min</option>
+      </select>
+    </div>
+  </div>
+</details>
 
 <div id="content">
   <div class="loading">
@@ -225,20 +327,31 @@
   </div>
 </div>
 
-<div class="actions">
-  <button id="copyBtn" class="btn btn-primary" onclick="copyToClipboard()" disabled>
-    Copy to Clipboard
-  </button>
-</div>
-
 <div class="preview-label">Preview</div>
 <div id="preview" class="preview">Loading...</div>
 
 <script>
   var allSlots = [];
 
+  var TZ_LABELS = {
+    'America/Los_Angeles': 'Pacific',
+    'America/Denver': 'Mountain',
+    'America/Chicago': 'Central',
+    'America/New_York': 'Eastern'
+  };
+
+  function getServerOptions() {
+    return {
+      numDays: parseInt(document.getElementById('numDays').value, 10),
+      startHour: parseInt(document.getElementById('startHour').value, 10),
+      endHour: parseInt(document.getElementById('endHour').value, 10),
+      includeToday: document.getElementById('includeToday').checked,
+      maxContinuousMinutes: parseInt(document.getElementById('maxBlock').value, 10),
+      minBreakMinutes: parseInt(document.getElementById('breakAfter').value, 10)
+    };
+  }
+
   function loadSlots() {
-    var numDays = parseInt(document.getElementById('numDays').value, 10);
     document.getElementById('content').innerHTML =
       '<div class="loading"><div class="spinner"></div><div>Loading your availability...</div></div>';
     document.getElementById('preview').textContent = 'Loading...';
@@ -247,7 +360,7 @@
     google.script.run
       .withSuccessHandler(onSlotsLoaded)
       .withFailureHandler(onError)
-      .getSlots({ numDays: numDays });
+      .getSlots(getServerOptions());
   }
 
   function onSlotsLoaded(days) {
@@ -331,6 +444,11 @@
     document.getElementById('copyBtn').disabled = selected.length === 0;
   }
 
+  function getTzLabel() {
+    var tz = document.getElementById('timezone').value;
+    return TZ_LABELS[tz] || tz;
+  }
+
   function formatLocal(days, style) {
     if (days.length === 0) return 'No slots selected.';
     if (style === 'compact') return formatCompact(days);
@@ -338,7 +456,8 @@
   }
 
   function formatBullets(days) {
-    var lines = ['I\'m available at the following times (Pacific):', ''];
+    var tzLabel = getTzLabel();
+    var lines = ['I\'m available at the following times (' + tzLabel + '):', ''];
     for (var d = 0; d < days.length; d++) {
       lines.push(days[d].dayLabel + ':');
       for (var s = 0; s < days[d].slots.length; s++) {
@@ -351,7 +470,8 @@
   }
 
   function formatCompact(days) {
-    var lines = ['Available (Pacific):'];
+    var tzLabel = getTzLabel();
+    var lines = ['Available (' + tzLabel + '):'];
     for (var d = 0; d < days.length; d++) {
       var parts = [];
       for (var s = 0; s < days[d].slots.length; s++) {
@@ -364,13 +484,22 @@
   }
 
   function fmtTime(iso) {
+    var tz = document.getElementById('timezone').value;
     var date = new Date(iso);
-    var hours = date.getHours();
-    var minutes = date.getMinutes();
-    var ampm = hours >= 12 ? 'pm' : 'am';
-    hours = hours % 12 || 12;
-    var minuteStr = minutes === 0 ? '' : ':' + String(minutes).padStart(2, '0');
-    return hours + minuteStr + ampm;
+    var str = date.toLocaleTimeString('en-US', {
+      timeZone: tz,
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    });
+    // "9:00 AM" → "9am", "2:30 PM" → "2:30pm"
+    var parts = str.match(/^(\d+):(\d+)\s*(AM|PM)$/i);
+    if (!parts) return str;
+    var h = parts[1];
+    var m = parts[2];
+    var ap = parts[3].toLowerCase();
+    if (m === '00') return h + ap;
+    return h + ':' + m + ap;
   }
 
   function copyToClipboard() {
@@ -413,8 +542,21 @@
     }, 2000);
   }
 
-  // Re-render preview when format changes
-  document.getElementById('formatStyle').addEventListener('change', updatePreview);
+  // Display-only settings: re-render preview (no server call)
+  document.getElementById('formatStyle').addEventListener('change', function() {
+    renderSlots();
+  });
+  document.getElementById('timezone').addEventListener('change', function() {
+    renderSlots();
+  });
+
+  // Server-affecting settings: reload slots
+  document.getElementById('numDays').addEventListener('change', loadSlots);
+  document.getElementById('includeToday').addEventListener('change', loadSlots);
+  document.getElementById('startHour').addEventListener('change', loadSlots);
+  document.getElementById('endHour').addEventListener('change', loadSlots);
+  document.getElementById('maxBlock').addEventListener('change', loadSlots);
+  document.getElementById('breakAfter').addEventListener('change', loadSlots);
 
   // Initial load
   loadSlots();
