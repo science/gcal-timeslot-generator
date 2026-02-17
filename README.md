@@ -14,6 +14,20 @@ A Google Apps Script web app that reads your Google Calendar and generates copya
 - Two output formats: bullets (email-friendly) or compact (chat-friendly)
 - One-click copy to clipboard
 
+## Screenshots
+
+<p align="center">
+  <img src="docs/images/main-screen.png" alt="Main screen showing preview and time slot selection" width="440">
+</p>
+
+The main screen shows a live preview of the formatted availability text at top, with checkboxes below to include or exclude individual time slots and entire days.
+
+<p align="center">
+  <img src="docs/images/advanced-settings.png" alt="Advanced settings with working hours, fatigue controls, and calendar selection" width="440">
+</p>
+
+Advanced settings let you configure working hours, meeting fatigue breaks, and which calendars to include in the busy-time calculation.
+
 ## Quick Install (No Developer Tools Required)
 
 This method uses only your browser. No Node.js, git, or command line needed.
