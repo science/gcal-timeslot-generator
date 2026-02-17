@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      --primary: #1a73e8;
+      --primary-hover: #1557b0;
+      --success: #0d904f;
+      --bg: #f8f9fa;
+      --card-bg: #ffffff;
+      --border: #dadce0;
+      --text: #202124;
+      --text-secondary: #5f6368;
+      --slot-bg: #e8f0fe;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Google Sans', 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      padding: 16px;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      font-size: 20px;
+      font-weight: 500;
+      margin-bottom: 12px;
+    }
+
+    .copy-bar {
+      margin-bottom: 16px;
+    }
+
+    .controls {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+
+    .controls label {
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .controls select, .controls input[type="number"] {
+      padding: 6px 10px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-size: 14px;
+      background: var(--card-bg);
+    }
+
+    .controls .checkbox-control {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .controls .checkbox-control input[type="checkbox"] {
+      accent-color: var(--primary);
+    }
+
+    details.advanced {
+      margin-bottom: 16px;
+    }
+
+    details.advanced summary {
+      font-size: 13px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      margin-bottom: 8px;
+    }
+
+    .advanced-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px 16px;
+      font-size: 13px;
+    }
+
+    .advanced-grid label {
+      color: var(--text-secondary);
+      display: block;
+      margin-bottom: 2px;
+    }
+
+    .advanced-grid select {
+      width: 100%;
+      padding: 4px 8px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-size: 13px;
+      background: var(--card-bg);
+    }
+
+    .calendar-list {
+      grid-column: 1 / -1;
+      border-top: 1px solid var(--border);
+      padding-top: 8px;
+      margin-top: 4px;
+    }
+
+    .calendar-list .cal-heading {
+      color: var(--text-secondary);
+      margin-bottom: 4px;
+      display: block;
+    }
+
+    .cal-label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 0;
+      color: var(--text);
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    .cal-label input[type="checkbox"] {
+      accent-color: var(--primary);
+    }
+
+    .cal-label.cal-primary {
+      font-weight: 500;
+    }
+
+    .day-group {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 12px;
+      overflow: hidden;
+    }
+
+    .day-header {
+      padding: 10px 14px;
+      font-weight: 500;
+      font-size: 14px;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .day-header input[type="checkbox"] {
+      accent-color: var(--primary);
+    }
+
+    .slot-item {
+      padding: 8px 14px 8px 36px;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-bottom: 1px solid var(--bg);
+    }
+
+    .slot-item:last-child { border-bottom: none; }
+
+    .slot-item input[type="checkbox"] {
+      accent-color: var(--primary);
+    }
+
+    .slot-time {
+      background: var(--slot-bg);
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-family: 'Roboto Mono', monospace;
+      font-size: 13px;
+    }
+
+    .btn {
+      padding: 10px 24px;
+      border: none;
+      border-radius: 4px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+    }
+
+    .btn-primary:hover { background: var(--primary-hover); }
+
+    .btn-primary.copied {
+      background: var(--success);
+    }
+
+    .btn-secondary {
+      background: var(--card-bg);
+      color: var(--primary);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover { background: var(--bg); }
+
+    .preview {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+      font-size: 13px;
+      font-family: 'Roboto Mono', monospace;
+      white-space: pre-wrap;
+      color: var(--text-secondary);
+      max-height: 300px;
+      overflow-y: auto;
+    }
+
+    .preview-label {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 40px;
+      color: var(--text-secondary);
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 24px;
+      height: 24px;
+      border: 3px solid var(--border);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-bottom: 8px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px;
+      color: var(--text-secondary);
+      font-size: 14px;
+    }
+
+    .error {
+      background: #fce8e6;
+      color: #c5221f;
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      margin-bottom: 12px;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Time Slot Generator</h1>
+
+<div class="copy-bar">
+  <button id="copyBtn" class="btn btn-primary" onclick="copyToClipboard()" disabled>
+    Copy to Clipboard
+  </button>
+</div>
+
+<div class="controls">
+  <div>
+    <label for="numDays">Days:</label>
+    <select id="numDays">
+      <option value="3">3 days</option>
+      <option value="5" selected>5 days</option>
+      <option value="10">10 days</option>
+    </select>
+  </div>
+  <div>
+    <label for="timezone">Timezone:</label>
+    <select id="timezone">
+      <option value="America/Los_Angeles" selected>Pacific</option>
+      <option value="America/Denver">Mountain</option>
+      <option value="America/Chicago">Central</option>
+      <option value="America/New_York">Eastern</option>
+    </select>
+  </div>
+  <div>
+    <label for="formatStyle">Format:</label>
+    <select id="formatStyle">
+      <option value="bullets">Bullets</option>
+      <option value="compact" selected>Compact</option>
+    </select>
+  </div>
+  <div class="checkbox-control">
+    <input type="checkbox" id="includeToday">
+    <label for="includeToday">Include today</label>
+  </div>
+  <button class="btn btn-secondary" onclick="loadSlots()">Refresh</button>
+</div>
+
+<details class="advanced">
+  <summary>Advanced settings</summary>
+  <div class="advanced-grid">
+    <div>
+      <label for="startHour">Start hour</label>
+      <select id="startHour">
+        <option value="7">7am</option>
+        <option value="8">8am</option>
+        <option value="9" selected>9am</option>
+        <option value="10">10am</option>
+      </select>
+    </div>
+    <div>
+      <label for="endHour">End hour</label>
+      <select id="endHour">
+        <option value="16">4pm</option>
+        <option value="17" selected>5pm</option>
+        <option value="18">6pm</option>
+        <option value="19">7pm</option>
+      </select>
+    </div>
+    <div>
+      <label for="maxBlock">Max meeting block</label>
+      <select id="maxBlock">
+        <option value="0">Off</option>
+        <option value="60">1h</option>
+        <option value="90">1.5h</option>
+        <option value="120" selected>2h</option>
+        <option value="180">3h</option>
+      </select>
+    </div>
+    <div>
+      <label for="breakAfter">Break after</label>
+      <select id="breakAfter">
+        <option value="15">15 min</option>
+        <option value="30" selected>30 min</option>
+        <option value="45">45 min</option>
+        <option value="60">60 min</option>
+      </select>
+    </div>
+    <div class="calendar-list">
+      <span class="cal-heading">Calendars</span>
+      <div id="calendarList">Loading calendars...</div>
+    </div>
+  </div>
+</details>
+
+<div id="content">
+  <div class="loading">
+    <div class="spinner"></div>
+    <div>Loading your availability...</div>
+  </div>
+</div>
+
+<div class="preview-label">Preview</div>
+<div id="preview" class="preview">Loading...</div>
+
+<script>
+  var allSlots = [];
+  var calendarData = [];
+
+  var TZ_LABELS = {
+    'America/Los_Angeles': 'Pacific',
+    'America/Denver': 'Mountain',
+    'America/Chicago': 'Central',
+    'America/New_York': 'Eastern'
+  };
+
+  function getServerOptions() {
+    return {
+      numDays: parseInt(document.getElementById('numDays').value, 10),
+      startHour: parseInt(document.getElementById('startHour').value, 10),
+      endHour: parseInt(document.getElementById('endHour').value, 10),
+      includeToday: document.getElementById('includeToday').checked,
+      maxContinuousMinutes: parseInt(document.getElementById('maxBlock').value, 10),
+      minBreakMinutes: parseInt(document.getElementById('breakAfter').value, 10),
+      calendarIds: getSelectedCalendarIds()
+    };
+  }
+
+  function loadCalendars() {
+    google.script.run
+      .withSuccessHandler(onCalendarsLoaded)
+      .withFailureHandler(function() {
+        document.getElementById('calendarList').textContent = 'Could not load calendars.';
+      })
+      .getCalendars();
+  }
+
+  function onCalendarsLoaded(calendars) {
+    calendarData = calendars;
+    var container = document.getElementById('calendarList');
+    if (calendars.length === 0) {
+      container.textContent = 'No calendars found.';
+      return;
+    }
+    var html = '';
+    for (var i = 0; i < calendars.length; i++) {
+      var cal = calendars[i];
+      var checked = cal.primary ? ' checked' : '';
+      var cls = cal.primary ? ' cal-primary' : '';
+      html += '<label class="cal-label' + cls + '">';
+      html += '<input type="checkbox" data-cal-id="' + cal.id + '"' + checked + ' onchange="loadSlots()">';
+      html += cal.name;
+      html += '</label>';
+    }
+    container.innerHTML = html;
+  }
+
+  function getSelectedCalendarIds() {
+    var checkboxes = document.querySelectorAll('#calendarList input[type="checkbox"]');
+    var ids = [];
+    for (var i = 0; i < checkboxes.length; i++) {
+      if (checkboxes[i].checked) {
+        ids.push(checkboxes[i].getAttribute('data-cal-id'));
+      }
+    }
+    return ids;
+  }
+
+  function loadSlots() {
+    document.getElementById('content').innerHTML =
+      '<div class="loading"><div class="spinner"></div><div>Loading your availability...</div></div>';
+    document.getElementById('preview').textContent = 'Loading...';
+    document.getElementById('copyBtn').disabled = true;
+
+    google.script.run
+      .withSuccessHandler(onSlotsLoaded)
+      .withFailureHandler(onError)
+      .getSlots(getServerOptions());
+  }
+
+  function onSlotsLoaded(days) {
+    allSlots = days;
+    renderSlots();
+  }
+
+  function onError(err) {
+    document.getElementById('content').innerHTML =
+      '<div class="error">Error loading calendar: ' + err.message + '</div>';
+    document.getElementById('preview').textContent = 'Error';
+  }
+
+  function renderSlots() {
+    var container = document.getElementById('content');
+
+    if (allSlots.length === 0) {
+      container.innerHTML = '<div class="empty-state">No availability found. Your calendar is fully booked!</div>';
+      updatePreview();
+      return;
+    }
+
+    var html = '';
+    for (var d = 0; d < allSlots.length; d++) {
+      var day = allSlots[d];
+      html += '<div class="day-group">';
+      html += '<div class="day-header">';
+      html += '<input type="checkbox" checked data-day="' + d + '" onchange="toggleDay(' + d + ')">';
+      html += '<span>' + day.dayLabel + '</span>';
+      html += '</div>';
+      for (var s = 0; s < day.slots.length; s++) {
+        var slot = day.slots[s];
+        html += '<div class="slot-item">';
+        html += '<input type="checkbox" checked data-day="' + d + '" data-slot="' + s + '" onchange="updatePreview()">';
+        html += '<span class="slot-time">' + fmtTime(slot.start) + ' - ' + fmtTime(slot.end) + '</span>';
+        html += '</div>';
+      }
+      html += '</div>';
+    }
+
+    container.innerHTML = html;
+    document.getElementById('copyBtn').disabled = false;
+    updatePreview();
+  }
+
+  function toggleDay(dayIndex) {
+    var dayCheckbox = document.querySelector('[data-day="' + dayIndex + '"]:not([data-slot])');
+    var slotCheckboxes = document.querySelectorAll('[data-day="' + dayIndex + '"][data-slot]');
+    for (var i = 0; i < slotCheckboxes.length; i++) {
+      slotCheckboxes[i].checked = dayCheckbox.checked;
+    }
+    updatePreview();
+  }
+
+  function getSelectedSlots() {
+    var selected = [];
+    for (var d = 0; d < allSlots.length; d++) {
+      var daySlots = [];
+      for (var s = 0; s < allSlots[d].slots.length; s++) {
+        var cb = document.querySelector('[data-day="' + d + '"][data-slot="' + s + '"]');
+        if (cb && cb.checked) {
+          daySlots.push(allSlots[d].slots[s]);
+        }
+      }
+      if (daySlots.length > 0) {
+        selected.push({
+          date: allSlots[d].date,
+          dayLabel: allSlots[d].dayLabel,
+          slots: daySlots
+        });
+      }
+    }
+    return selected;
+  }
+
+  function updatePreview() {
+    var selected = getSelectedSlots();
+    var style = document.getElementById('formatStyle').value;
+    var text = formatLocal(selected, style);
+    document.getElementById('preview').textContent = text;
+    document.getElementById('copyBtn').disabled = selected.length === 0;
+  }
+
+  function getTzLabel() {
+    var tz = document.getElementById('timezone').value;
+    return TZ_LABELS[tz] || tz;
+  }
+
+  function formatLocal(days, style) {
+    if (days.length === 0) return 'No slots selected.';
+    if (style === 'compact') return formatCompact(days);
+    return formatBullets(days);
+  }
+
+  function formatBullets(days) {
+    var tzLabel = getTzLabel();
+    var lines = ['I\'m available at the following times (' + tzLabel + '):', ''];
+    for (var d = 0; d < days.length; d++) {
+      lines.push(days[d].dayLabel + ':');
+      for (var s = 0; s < days[d].slots.length; s++) {
+        var sl = days[d].slots[s];
+        lines.push('  - ' + fmtTime(sl.start) + ' - ' + fmtTime(sl.end));
+      }
+      if (d < days.length - 1) lines.push('');
+    }
+    return lines.join('\n');
+  }
+
+  function formatCompact(days) {
+    var tzLabel = getTzLabel();
+    var lines = ['Available (' + tzLabel + '):'];
+    for (var d = 0; d < days.length; d++) {
+      var parts = [];
+      for (var s = 0; s < days[d].slots.length; s++) {
+        var sl = days[d].slots[s];
+        parts.push(fmtTime(sl.start) + '-' + fmtTime(sl.end));
+      }
+      lines.push(days[d].dayLabel + ': ' + parts.join(', '));
+    }
+    return lines.join('\n');
+  }
+
+  function fmtTime(iso) {
+    var tz = document.getElementById('timezone').value;
+    var date = new Date(iso);
+    var str = date.toLocaleTimeString('en-US', {
+      timeZone: tz,
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    });
+    // "9:00 AM" → "9am", "2:30 PM" → "2:30pm"
+    var parts = str.match(/^(\d+):(\d+)\s*(AM|PM)$/i);
+    if (!parts) return str;
+    var h = parts[1];
+    var m = parts[2];
+    var ap = parts[3].toLowerCase();
+    if (m === '00') return h + ap;
+    return h + ':' + m + ap;
+  }
+
+  function copyToClipboard() {
+    var text = document.getElementById('preview').textContent;
+    var btn = document.getElementById('copyBtn');
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function() {
+        showCopied(btn);
+      }, function() {
+        fallbackCopy(text, btn);
+      });
+    } else {
+      fallbackCopy(text, btn);
+    }
+  }
+
+  function fallbackCopy(text, btn) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      document.execCommand('copy');
+      showCopied(btn);
+    } catch (e) {
+      btn.textContent = 'Copy failed';
+    }
+    document.body.removeChild(ta);
+  }
+
+  function showCopied(btn) {
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(function() {
+      btn.textContent = 'Copy to Clipboard';
+      btn.classList.remove('copied');
+    }, 2000);
+  }
+
+  // Display-only settings: re-render preview (no server call)
+  document.getElementById('formatStyle').addEventListener('change', function() {
+    renderSlots();
+  });
+  document.getElementById('timezone').addEventListener('change', function() {
+    renderSlots();
+  });
+
+  // Server-affecting settings: reload slots
+  document.getElementById('numDays').addEventListener('change', loadSlots);
+  document.getElementById('includeToday').addEventListener('change', loadSlots);
+  document.getElementById('startHour').addEventListener('change', loadSlots);
+  document.getElementById('endHour').addEventListener('change', loadSlots);
+  document.getElementById('maxBlock').addEventListener('change', loadSlots);
+  document.getElementById('breakAfter').addEventListener('change', loadSlots);
+
+  // Initial load
+  loadCalendars();
+  loadSlots();
+</script>
+
+</body>
+</html>

@@ -17,14 +17,21 @@ function stripModuleSyntax() {
   };
 }
 
-// Custom plugin to copy HTML files to dist
+// Custom plugin to copy HTML files to dist and release
 function copyHtml() {
   return {
     name: "copy-html",
     writeBundle() {
       mkdirSync("dist", { recursive: true });
+      mkdirSync("release", { recursive: true });
       const html = readFileSync("src/pages/index.html", "utf-8");
       writeFileSync(join("dist", "index.html"), html);
+      // Copy built files to release/ for non-developer distribution
+      const code = readFileSync("dist/Code.gs", "utf-8");
+      const manifest = readFileSync("appsscript.json", "utf-8");
+      writeFileSync(join("release", "Code.gs"), code);
+      writeFileSync(join("release", "index.html"), html);
+      writeFileSync(join("release", "appsscript.json"), manifest);
     },
   };
 }
