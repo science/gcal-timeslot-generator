@@ -168,13 +168,22 @@ describe("getNextBusinessDays", () => {
     expect(days[2].getDate()).toBe(25);
   });
 
-  it("starts from day after tomorrow when past endHour and includeToday=false", () => {
+  it("starts from tomorrow even when past endHour and includeToday=false", () => {
     jest.useFakeTimers();
     // Wednesday Feb 18, 2026 at 6pm (past 5pm endHour)
     jest.setSystemTime(new Date(2026, 1, 18, 18, 0));
     const days = getNextBusinessDays(1, false, 17);
-    // Should skip today (past endHour) + skip tomorrow behavior = Friday
-    expect(days[0].getDate()).toBe(20);
+    // Should start from tomorrow (Thursday), not skip an extra day
+    expect(days[0].getDate()).toBe(19);
+  });
+
+  it("starts from tomorrow when Monday 9pm and includeToday=false", () => {
+    jest.useFakeTimers();
+    // Monday Feb 16, 2026 at 9pm Pacific (past 5pm endHour)
+    jest.setSystemTime(new Date(2026, 1, 16, 21, 0));
+    const days = getNextBusinessDays(5, false, 17);
+    // Should start from Tuesday, not skip to Wednesday
+    expect(days[0].getDate()).toBe(17);
   });
 
   it("includes today when includeToday=true and before endHour on weekday", () => {
