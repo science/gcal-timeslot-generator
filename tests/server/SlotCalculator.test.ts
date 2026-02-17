@@ -313,3 +313,45 @@ describe("applyFatigueBreaks", () => {
     expect(result).toEqual([{ start: ms(9), end: ms(14) }]);
   });
 });
+
+// ─── Multi-calendar merging (regression / documentation) ───
+
+describe("multi-calendar busy block merging", () => {
+  it("merges overlapping blocks from two calendars", () => {
+    // Calendar A: meeting 9-10, Calendar B: meeting 9:30-11
+    const blocksA: BusyBlock[] = [{ start: ms(9), end: ms(10) }];
+    const blocksB: BusyBlock[] = [{ start: ms(9, 30), end: ms(11) }];
+    const merged = mergeBusyBlocks([...blocksA, ...blocksB]);
+    expect(merged).toEqual([{ start: ms(9), end: ms(11) }]);
+  });
+
+  it("keeps non-overlapping blocks from different calendars separate", () => {
+    const blocksA: BusyBlock[] = [{ start: ms(9), end: ms(10) }];
+    const blocksB: BusyBlock[] = [{ start: ms(14), end: ms(15) }];
+    const merged = mergeBusyBlocks([...blocksA, ...blocksB]);
+    expect(merged).toEqual([
+      { start: ms(9), end: ms(10) },
+      { start: ms(14), end: ms(15) },
+    ]);
+  });
+
+  it("merges identical events appearing on both calendars", () => {
+    // Same meeting accepted on both work and personal calendar
+    const block: BusyBlock = { start: ms(10), end: ms(11) };
+    const merged = mergeBusyBlocks([{ ...block }, { ...block }]);
+    expect(merged).toEqual([{ start: ms(10), end: ms(11) }]);
+  });
+
+  it("correctly computes free slots from multi-calendar blocks", () => {
+    // Cal A: 9-10:30, Cal B: 10-11:30 → merged 9-11:30 → free 11:30-17
+    const combined: BusyBlock[] = [
+      { start: ms(9), end: ms(10, 30) },
+      { start: ms(10), end: ms(11, 30) },
+    ];
+    const merged = mergeBusyBlocks(combined);
+    const slots = computeFreeSlots(merged, ms(9), ms(17), 30);
+    expect(slots).toHaveLength(1);
+    expect(new Date(slots[0].start).getTime()).toBe(ms(11, 30));
+    expect(new Date(slots[0].end).getTime()).toBe(ms(17));
+  });
+});

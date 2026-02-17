@@ -17,6 +17,13 @@ export interface SlotOptions {
   includeToday: boolean;        // Include today's remaining slots (default false)
   maxContinuousMinutes: number; // Max meeting block before forced break (default 120, 0=disabled)
   minBreakMinutes: number;      // Break duration after long block (default 30)
+  calendarIds?: string[];       // Calendar IDs to check (undefined/empty = primary only)
+}
+
+export interface CalendarInfo {
+  id: string;
+  name: string;
+  primary: boolean;
 }
 
 export interface BusyBlock {

@@ -154,9 +154,23 @@ export function applyFatigueBreaks(
   return mergeBusyBlocks(extended);
 }
 
+function resolveCalendars(calendarIds?: string[]): GoogleAppsScript.Calendar.Calendar[] {
+  const calendars: GoogleAppsScript.Calendar.Calendar[] = [];
+  if (calendarIds && calendarIds.length > 0) {
+    for (const id of calendarIds) {
+      const cal = CalendarApp.getCalendarById(id);
+      if (cal) calendars.push(cal);
+    }
+  }
+  if (calendars.length === 0) {
+    calendars.push(CalendarApp.getDefaultCalendar());
+  }
+  return calendars;
+}
+
 export function getAvailableSlots(options?: Partial<SlotOptions>): DaySlots[] {
   const opts = { ...getDefaultSlotOptions(), ...options };
-  const calendar = CalendarApp.getDefaultCalendar();
+  const calendars = resolveCalendars(opts.calendarIds);
   const businessDays = getNextBusinessDays(opts.numDays, opts.includeToday, opts.endHour);
   const result: DaySlots[] = [];
 
@@ -166,20 +180,21 @@ export function getAvailableSlots(options?: Partial<SlotOptions>): DaySlots[] {
     const dayEnd = new Date(day);
     dayEnd.setHours(opts.endHour, 0, 0, 0);
 
-    const events = calendar.getEvents(dayStart, dayEnd);
-
     const busyBlocks: BusyBlock[] = [];
-    for (const event of events) {
-      if (isDeclined(event)) continue;
-      if (isTransparentAllDay(event)) continue;
+    for (const calendar of calendars) {
+      const events = calendar.getEvents(dayStart, dayEnd);
+      for (const event of events) {
+        if (isDeclined(event)) continue;
+        if (isTransparentAllDay(event)) continue;
 
-      const evStart = event.getStartTime().getTime();
-      const evEnd = event.getEndTime().getTime();
+        const evStart = event.getStartTime().getTime();
+        const evEnd = event.getEndTime().getTime();
 
-      busyBlocks.push({
-        start: Math.max(evStart, dayStart.getTime()),
-        end: Math.min(evEnd, dayEnd.getTime()),
-      });
+        busyBlocks.push({
+          start: Math.max(evStart, dayStart.getTime()),
+          end: Math.min(evEnd, dayEnd.getTime()),
+        });
+      }
     }
 
     const merged = mergeBusyBlocks(busyBlocks);

@@ -1,6 +1,6 @@
 {
   "name": "gcal-timeslot-generator",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Google Apps Script web app that reads your Google Calendar and generates copyable time slots for emails",
   "private": true,
   "scripts": {
