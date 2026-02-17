@@ -280,4 +280,11 @@ function getSlotsFormatted(style, options) {
     const slots = getAvailableSlots(options);
     return formatSlots(slots, style);
 }
+function saveSettings(settings) {
+    PropertiesService.getUserProperties().setProperty('slotGeneratorSettings', JSON.stringify(settings));
+}
+function loadSettings() {
+    const raw = PropertiesService.getUserProperties().getProperty('slotGeneratorSettings');
+    return raw ? JSON.parse(raw) : null;
+}
 

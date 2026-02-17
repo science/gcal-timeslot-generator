@@ -379,8 +379,11 @@
 </div>
 
 <script>
+  var SETTINGS_KEY = 'slotGeneratorSettings';
   var allSlots = [];
   var calendarData = [];
+  var savedCalendarIds = null;
+  var lastLoadDate = new Date().toDateString();
 
   var TZ_LABELS = {
     'America/Los_Angeles': 'Pacific',
@@ -400,6 +403,63 @@
       calendarIds: getSelectedCalendarIds(),
       calendarMode: document.getElementById('calendarMode').value
     };
+  }
+
+  function getCurrentSettings() {
+    return {
+      numDays: document.getElementById('numDays').value,
+      timezone: document.getElementById('timezone').value,
+      formatStyle: document.getElementById('formatStyle').value,
+      includeToday: document.getElementById('includeToday').checked,
+      startHour: document.getElementById('startHour').value,
+      endHour: document.getElementById('endHour').value,
+      maxBlock: document.getElementById('maxBlock').value,
+      breakAfter: document.getElementById('breakAfter').value,
+      calendarMode: document.getElementById('calendarMode').value,
+      calendarIds: getSelectedCalendarIds()
+    };
+  }
+
+  function applySettings(settings) {
+    if (!settings) return;
+    var selects = ['numDays', 'timezone', 'formatStyle', 'startHour', 'endHour', 'maxBlock', 'breakAfter', 'calendarMode'];
+    for (var i = 0; i < selects.length; i++) {
+      var id = selects[i];
+      if (settings[id] !== undefined) {
+        var el = document.getElementById(id);
+        // Only set if value is a valid option
+        var option = el.querySelector('option[value="' + settings[id] + '"]');
+        if (option) el.value = settings[id];
+      }
+    }
+    if (settings.includeToday !== undefined) {
+      document.getElementById('includeToday').checked = !!settings.includeToday;
+    }
+    // Save calendarIds for later application after calendars load
+    if (settings.calendarIds) {
+      savedCalendarIds = settings.calendarIds;
+    }
+  }
+
+  function applyCalendarSelection(ids) {
+    if (!ids || !ids.length) return false;
+    var checkboxes = document.querySelectorAll('#calendarList input[type="checkbox"]');
+    if (checkboxes.length === 0) return false;
+    var changed = false;
+    for (var i = 0; i < checkboxes.length; i++) {
+      var shouldCheck = ids.indexOf(checkboxes[i].getAttribute('data-cal-id')) !== -1;
+      if (checkboxes[i].checked !== shouldCheck) changed = true;
+      checkboxes[i].checked = shouldCheck;
+    }
+    return changed;
+  }
+
+  function persistSettings() {
+    var settings = getCurrentSettings();
+    try {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    } catch (e) { /* quota exceeded — ignore */ }
+    google.script.run.saveSettings(settings);
   }
 
   function loadCalendars() {
@@ -424,11 +484,15 @@
       var checked = cal.primary ? ' checked' : '';
       var cls = cal.primary ? ' cal-primary' : '';
       html += '<label class="cal-label' + cls + '">';
-      html += '<input type="checkbox" data-cal-id="' + cal.id + '"' + checked + ' onchange="loadSlots()">';
+      html += '<input type="checkbox" data-cal-id="' + cal.id + '"' + checked + ' onchange="persistSettings(); loadSlots()">';
       html += cal.name;
       html += '</label>';
     }
     container.innerHTML = html;
+    // Apply saved calendar selection and reload if it changed from defaults
+    if (savedCalendarIds && applyCalendarSelection(savedCalendarIds)) {
+      loadSlots();
+    }
   }
 
   function getSelectedCalendarIds() {
@@ -443,6 +507,7 @@
   }
 
   function loadSlots() {
+    lastLoadDate = new Date().toDateString();
     document.getElementById('content').innerHTML =
       '<div class="loading"><div class="spinner"></div><div>Loading your availability...</div></div>';
     document.getElementById('preview').textContent = 'Loading...';
@@ -633,22 +698,54 @@
     }, 2000);
   }
 
-  // Display-only settings: re-render preview (no server call)
+  // Display-only settings: persist + re-render preview (no server call)
   document.getElementById('formatStyle').addEventListener('change', function() {
+    persistSettings();
     renderSlots();
   });
   document.getElementById('timezone').addEventListener('change', function() {
+    persistSettings();
     renderSlots();
   });
 
-  // Server-affecting settings: reload slots
-  document.getElementById('numDays').addEventListener('change', loadSlots);
-  document.getElementById('includeToday').addEventListener('change', loadSlots);
-  document.getElementById('startHour').addEventListener('change', loadSlots);
-  document.getElementById('endHour').addEventListener('change', loadSlots);
-  document.getElementById('maxBlock').addEventListener('change', loadSlots);
-  document.getElementById('breakAfter').addEventListener('change', loadSlots);
-  document.getElementById('calendarMode').addEventListener('change', loadSlots);
+  // Server-affecting settings: persist + reload slots
+  document.getElementById('numDays').addEventListener('change', function() { persistSettings(); loadSlots(); });
+  document.getElementById('includeToday').addEventListener('change', function() { persistSettings(); loadSlots(); });
+  document.getElementById('startHour').addEventListener('change', function() { persistSettings(); loadSlots(); });
+  document.getElementById('endHour').addEventListener('change', function() { persistSettings(); loadSlots(); });
+  document.getElementById('maxBlock').addEventListener('change', function() { persistSettings(); loadSlots(); });
+  document.getElementById('breakAfter').addEventListener('change', function() { persistSettings(); loadSlots(); });
+  document.getElementById('calendarMode').addEventListener('change', function() { persistSettings(); loadSlots(); });
+
+  // Hydrate from localStorage before initial load
+  try {
+    var saved = localStorage.getItem(SETTINGS_KEY);
+    if (saved) applySettings(JSON.parse(saved));
+  } catch (e) { /* corrupt data — ignore */ }
+
+  // Background: sync from server (server wins for cross-device)
+  google.script.run
+    .withSuccessHandler(function(serverSettings) {
+      if (!serverSettings) return;
+      try {
+        var local = localStorage.getItem(SETTINGS_KEY);
+        if (!local) {
+          // No local settings — apply server settings
+          applySettings(serverSettings);
+          localStorage.setItem(SETTINGS_KEY, JSON.stringify(serverSettings));
+          loadSlots();
+        }
+      } catch (e) { /* ignore */ }
+    })
+    .loadSettings();
+
+  // Reload when tab becomes visible on a new day
+  document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState === 'visible' && new Date().toDateString() !== lastLoadDate) {
+      loadCalendars();
+      loadSlots();
+    }
+  });
 
   // Initial load
   loadCalendars();

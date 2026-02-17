@@ -33,3 +33,15 @@ export function getSlotsFormatted(
   const slots = getAvailableSlots(options);
   return formatSlots(slots, style);
 }
+
+export function saveSettings(settings: Record<string, unknown>): void {
+  PropertiesService.getUserProperties().setProperty(
+    'slotGeneratorSettings',
+    JSON.stringify(settings)
+  );
+}
+
+export function loadSettings(): Record<string, unknown> | null {
+  const raw = PropertiesService.getUserProperties().getProperty('slotGeneratorSettings');
+  return raw ? JSON.parse(raw) : null;
+}
