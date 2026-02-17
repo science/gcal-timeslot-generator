@@ -137,47 +137,51 @@
     .day-group {
       background: var(--card-bg);
       border: 1px solid var(--border);
-      border-radius: 8px;
-      margin-bottom: 12px;
+      border-radius: 6px;
+      margin-bottom: 6px;
       overflow: hidden;
     }
 
     .day-header {
-      padding: 10px 14px;
+      padding: 5px 10px;
       font-weight: 500;
-      font-size: 14px;
+      font-size: 13px;
       background: var(--bg);
       border-bottom: 1px solid var(--border);
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
     }
 
     .day-header input[type="checkbox"] {
       accent-color: var(--primary);
     }
 
-    .slot-item {
-      padding: 8px 14px 8px 36px;
-      font-size: 14px;
+    .slots-wrap {
       display: flex;
-      align-items: center;
-      gap: 8px;
-      border-bottom: 1px solid var(--bg);
+      flex-wrap: wrap;
+      gap: 4px;
+      padding: 6px 8px;
     }
 
-    .slot-item:last-child { border-bottom: none; }
+    .slot-item {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+    }
 
     .slot-item input[type="checkbox"] {
       accent-color: var(--primary);
+      margin: 0;
     }
 
     .slot-time {
       background: var(--slot-bg);
-      padding: 2px 8px;
+      padding: 2px 6px;
       border-radius: 4px;
       font-family: 'Roboto Mono', monospace;
-      font-size: 13px;
+      font-size: 12px;
+      white-space: nowrap;
     }
 
     .btn {
@@ -547,13 +551,15 @@
       html += '<input type="checkbox" checked data-day="' + d + '" onchange="toggleDay(' + d + ')">';
       html += '<span>' + day.dayLabel + '</span>';
       html += '</div>';
+      html += '<div class="slots-wrap">';
       for (var s = 0; s < day.slots.length; s++) {
         var slot = day.slots[s];
         html += '<div class="slot-item">';
         html += '<input type="checkbox" checked data-day="' + d + '" data-slot="' + s + '" onchange="updatePreview()">';
-        html += '<span class="slot-time">' + fmtTime(slot.start) + ' - ' + fmtTime(slot.end) + '</span>';
+        html += '<span class="slot-time">' + fmtTime(slot.start) + ' \u2013 ' + fmtTime(slot.end) + '</span>';
         html += '</div>';
       }
+      html += '</div>';
       html += '</div>';
     }
 

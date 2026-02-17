@@ -24,10 +24,7 @@ function getNextBusinessDays(numDays, includeToday, endHour) {
         current.setDate(current.getDate() + 1);
     }
     else {
-        // Start from tomorrow (or next day if past endHour — legacy skip-today behavior)
-        if (now.getHours() >= endHour) {
-            current.setDate(current.getDate() + 1);
-        }
+        // Start from tomorrow
         current.setDate(current.getDate() + 1);
     }
     while (days.length < numDays) {
