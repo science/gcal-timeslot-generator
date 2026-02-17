@@ -18,6 +18,7 @@ export interface SlotOptions {
   maxContinuousMinutes: number; // Max meeting block before forced break (default 120, 0=disabled)
   minBreakMinutes: number;      // Break duration after long block (default 30)
   calendarIds?: string[];       // Calendar IDs to check (undefined/empty = primary only)
+  calendarMode?: 'mine' | 'group'; // 'mine' = all calendars are yours, 'group' = different people
 }
 
 export interface CalendarInfo {

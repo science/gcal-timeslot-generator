@@ -7,6 +7,7 @@ function getDefaultSlotOptions() {
         includeToday: false,
         maxContinuousMinutes: 120,
         minBreakMinutes: 30,
+        calendarMode: 'mine',
     };
 }
 function getNextBusinessDays(numDays, includeToday, endHour) {
@@ -133,6 +134,15 @@ function applyFatigueBreaks(blocks, maxContinuousMinutes, minBreakMinutes, dayEn
     });
     return mergeBusyBlocks(extended);
 }
+function applyFatiguePerCalendar(blocksByCalendar, maxContinuousMinutes, minBreakMinutes, dayEndMs) {
+    const allBlocks = [];
+    for (const calBlocks of blocksByCalendar) {
+        const merged = mergeBusyBlocks(calBlocks);
+        const withFatigue = applyFatigueBreaks(merged, maxContinuousMinutes, minBreakMinutes, dayEndMs);
+        allBlocks.push(...withFatigue);
+    }
+    return mergeBusyBlocks(allBlocks);
+}
 function resolveCalendars(calendarIds) {
     const calendars = [];
     if (calendarIds && calendarIds.length > 0) {
@@ -157,8 +167,9 @@ function getAvailableSlots(options) {
         dayStart.setHours(opts.startHour, 0, 0, 0);
         const dayEnd = new Date(day);
         dayEnd.setHours(opts.endHour, 0, 0, 0);
-        const busyBlocks = [];
+        const blocksByCalendar = [];
         for (const calendar of calendars) {
+            const calBlocks = [];
             const events = calendar.getEvents(dayStart, dayEnd);
             for (const event of events) {
                 if (isDeclined(event))
@@ -167,14 +178,22 @@ function getAvailableSlots(options) {
                     continue;
                 const evStart = event.getStartTime().getTime();
                 const evEnd = event.getEndTime().getTime();
-                busyBlocks.push({
+                calBlocks.push({
                     start: Math.max(evStart, dayStart.getTime()),
                     end: Math.min(evEnd, dayEnd.getTime()),
                 });
             }
+            blocksByCalendar.push(calBlocks);
         }
-        const merged = mergeBusyBlocks(busyBlocks);
-        const withBreaks = applyFatigueBreaks(merged, opts.maxContinuousMinutes, opts.minBreakMinutes, dayEnd.getTime());
+        let withBreaks;
+        if (opts.calendarMode === 'group' && blocksByCalendar.length > 1) {
+            withBreaks = applyFatiguePerCalendar(blocksByCalendar, opts.maxContinuousMinutes, opts.minBreakMinutes, dayEnd.getTime());
+        }
+        else {
+            const allBlocks = blocksByCalendar.flat();
+            const merged = mergeBusyBlocks(allBlocks);
+            withBreaks = applyFatigueBreaks(merged, opts.maxContinuousMinutes, opts.minBreakMinutes, dayEnd.getTime());
+        }
         let slots = computeFreeSlots(withBreaks, dayStart.getTime(), dayEnd.getTime(), opts.minMinutes);
         // If today, filter out past slots
         const now = new Date();

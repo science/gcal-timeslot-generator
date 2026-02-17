@@ -6,6 +6,7 @@ import {
   formatDateKey,
   filterPastSlots,
   applyFatigueBreaks,
+  applyFatiguePerCalendar,
 } from "../../src/server/SlotCalculator";
 import type { BusyBlock } from "../../src/shared/types";
 
@@ -353,5 +354,81 @@ describe("multi-calendar busy block merging", () => {
     expect(slots).toHaveLength(1);
     expect(new Date(slots[0].start).getTime()).toBe(ms(11, 30));
     expect(new Date(slots[0].end).getTime()).toBe(ms(17));
+  });
+});
+
+// ─── applyFatiguePerCalendar ───
+
+describe("applyFatiguePerCalendar", () => {
+  const dayEnd = ms(17);
+
+  it("does NOT add fatigue break for adjacent short blocks from different calendars", () => {
+    // Core bug fix: Cal A 9-10 + Cal B 10-11 = 2hr merged, but neither person
+    // has a 2hr block — no fatigue break should be added
+    const calA: BusyBlock[] = [{ start: ms(9), end: ms(10) }];
+    const calB: BusyBlock[] = [{ start: ms(10), end: ms(11) }];
+    const result = applyFatiguePerCalendar([calA, calB], 120, 30, dayEnd);
+    // Should merge to one block 9-11 with NO fatigue extension
+    expect(result).toEqual([{ start: ms(9), end: ms(11) }]);
+  });
+
+  it("applies fatigue independently per calendar", () => {
+    // Cal A has 2hr block (gets fatigue), Cal B has 1hr (doesn't)
+    const calA: BusyBlock[] = [{ start: ms(9), end: ms(11) }];   // 2hr → fatigue
+    const calB: BusyBlock[] = [{ start: ms(14), end: ms(15) }];  // 1hr → no fatigue
+    const result = applyFatiguePerCalendar([calA, calB], 120, 30, dayEnd);
+    expect(result).toEqual([
+      { start: ms(9), end: ms(11, 30) },  // Cal A extended
+      { start: ms(14), end: ms(15) },      // Cal B unchanged
+    ]);
+  });
+
+  it("merges correctly when fatigue-extended block overlaps another calendar's block", () => {
+    // Cal A: 9-11 (2hr → extends to 11:30), Cal B: 11:15-12
+    // After fatigue on A: 9-11:30, which overlaps B's 11:15-12 → merged to 9-12
+    const calA: BusyBlock[] = [{ start: ms(9), end: ms(11) }];
+    const calB: BusyBlock[] = [{ start: ms(11, 15), end: ms(12) }];
+    const result = applyFatiguePerCalendar([calA, calB], 120, 30, dayEnd);
+    expect(result).toEqual([{ start: ms(9), end: ms(12) }]);
+  });
+
+  it("matches applyFatigueBreaks for a single calendar", () => {
+    const blocks: BusyBlock[] = [
+      { start: ms(9), end: ms(11) },
+      { start: ms(11, 15), end: ms(12) },
+    ];
+    const perCalResult = applyFatiguePerCalendar([blocks], 120, 30, dayEnd);
+    const directResult = applyFatigueBreaks(
+      mergeBusyBlocks(blocks), 120, 30, dayEnd
+    );
+    expect(perCalResult).toEqual(directResult);
+  });
+
+  it("returns empty for empty input", () => {
+    expect(applyFatiguePerCalendar([], 120, 30, dayEnd)).toEqual([]);
+  });
+
+  it("returns empty for empty calendars", () => {
+    expect(applyFatiguePerCalendar([[], []], 120, 30, dayEnd)).toEqual([]);
+  });
+
+  it("applies fatigue to both calendars independently when both have long blocks", () => {
+    // Cal A: 9-11 (2hr → 11:30), Cal B: 13-15 (2hr → 15:30)
+    const calA: BusyBlock[] = [{ start: ms(9), end: ms(11) }];
+    const calB: BusyBlock[] = [{ start: ms(13), end: ms(15) }];
+    const result = applyFatiguePerCalendar([calA, calB], 120, 30, dayEnd);
+    expect(result).toEqual([
+      { start: ms(9), end: ms(11, 30) },
+      { start: ms(13), end: ms(15, 30) },
+    ]);
+  });
+
+  it("does NOT add fatigue for three adjacent 1hr blocks from three calendars", () => {
+    // 3hr merged span but no single calendar has a 2hr+ block
+    const calA: BusyBlock[] = [{ start: ms(9), end: ms(10) }];
+    const calB: BusyBlock[] = [{ start: ms(10), end: ms(11) }];
+    const calC: BusyBlock[] = [{ start: ms(11), end: ms(12) }];
+    const result = applyFatiguePerCalendar([calA, calB, calC], 120, 30, dayEnd);
+    expect(result).toEqual([{ start: ms(9), end: ms(12) }]);
   });
 });

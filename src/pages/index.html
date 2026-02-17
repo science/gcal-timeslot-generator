@@ -356,6 +356,13 @@
     <div class="calendar-list">
       <span class="cal-heading">Calendars</span>
       <div id="calendarList">Loading calendars...</div>
+      <div style="margin-top: 8px;">
+        <label for="calendarMode" style="color: var(--text-secondary); display: block; margin-bottom: 2px;">Calendar mode</label>
+        <select id="calendarMode" style="width: 100%; padding: 4px 8px; border: 1px solid var(--border); border-radius: 4px; font-size: 13px; background: var(--card-bg);">
+          <option value="mine" selected>My calendars</option>
+          <option value="group">Group scheduling</option>
+        </select>
+      </div>
     </div>
   </div>
 </details>
@@ -390,7 +397,8 @@
       includeToday: document.getElementById('includeToday').checked,
       maxContinuousMinutes: parseInt(document.getElementById('maxBlock').value, 10),
       minBreakMinutes: parseInt(document.getElementById('breakAfter').value, 10),
-      calendarIds: getSelectedCalendarIds()
+      calendarIds: getSelectedCalendarIds(),
+      calendarMode: document.getElementById('calendarMode').value
     };
   }
 
@@ -640,6 +648,7 @@
   document.getElementById('endHour').addEventListener('change', loadSlots);
   document.getElementById('maxBlock').addEventListener('change', loadSlots);
   document.getElementById('breakAfter').addEventListener('change', loadSlots);
+  document.getElementById('calendarMode').addEventListener('change', loadSlots);
 
   // Initial load
   loadCalendars();
