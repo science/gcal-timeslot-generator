@@ -349,12 +349,31 @@
       </select>
     </div>
     <div>
-      <label for="breakAfter">Break after</label>
+      <label for="breakAfter">Required break</label>
       <select id="breakAfter">
         <option value="15">15 min</option>
         <option value="30" selected>30 min</option>
         <option value="45">45 min</option>
         <option value="60">60 min</option>
+      </select>
+    </div>
+    <div>
+      <label for="minGap">Ignore gaps under</label>
+      <select id="minGap">
+        <option value="0">Off</option>
+        <option value="5">5 min</option>
+        <option value="10">10 min</option>
+        <option value="15" selected>15 min</option>
+        <option value="20">20 min</option>
+      </select>
+    </div>
+    <div>
+      <label for="roundTo">Round to nearest</label>
+      <select id="roundTo">
+        <option value="5">5 min</option>
+        <option value="10">10 min</option>
+        <option value="15" selected>15 min</option>
+        <option value="30">30 min</option>
       </select>
     </div>
     <div class="calendar-list">
@@ -404,8 +423,10 @@
       includeToday: document.getElementById('includeToday').checked,
       maxContinuousMinutes: parseInt(document.getElementById('maxBlock').value, 10),
       minBreakMinutes: parseInt(document.getElementById('breakAfter').value, 10),
+      minGapMinutes: parseInt(document.getElementById('minGap').value, 10),
       calendarIds: getSelectedCalendarIds(),
-      calendarMode: document.getElementById('calendarMode').value
+      calendarMode: document.getElementById('calendarMode').value,
+      roundMinutes: parseInt(document.getElementById('roundTo').value, 10)
     };
   }
 
@@ -419,14 +440,16 @@
       endHour: document.getElementById('endHour').value,
       maxBlock: document.getElementById('maxBlock').value,
       breakAfter: document.getElementById('breakAfter').value,
+      minGap: document.getElementById('minGap').value,
       calendarMode: document.getElementById('calendarMode').value,
+      roundTo: document.getElementById('roundTo').value,
       calendarIds: getSelectedCalendarIds()
     };
   }
 
   function applySettings(settings) {
     if (!settings) return;
-    var selects = ['numDays', 'timezone', 'formatStyle', 'startHour', 'endHour', 'maxBlock', 'breakAfter', 'calendarMode'];
+    var selects = ['numDays', 'timezone', 'formatStyle', 'startHour', 'endHour', 'maxBlock', 'breakAfter', 'minGap', 'calendarMode', 'roundTo'];
     for (var i = 0; i < selects.length; i++) {
       var id = selects[i];
       if (settings[id] !== undefined) {
@@ -721,7 +744,9 @@
   document.getElementById('endHour').addEventListener('change', function() { persistSettings(); loadSlots(); });
   document.getElementById('maxBlock').addEventListener('change', function() { persistSettings(); loadSlots(); });
   document.getElementById('breakAfter').addEventListener('change', function() { persistSettings(); loadSlots(); });
+  document.getElementById('minGap').addEventListener('change', function() { persistSettings(); loadSlots(); });
   document.getElementById('calendarMode').addEventListener('change', function() { persistSettings(); loadSlots(); });
+  document.getElementById('roundTo').addEventListener('change', function() { persistSettings(); loadSlots(); });
 
   // Hydrate from localStorage before initial load
   try {
