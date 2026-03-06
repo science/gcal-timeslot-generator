@@ -132,15 +132,29 @@ By default, only your primary calendar is checked. To merge availability across 
 
 ## Updating to a New Version
 
-If a new version is released:
+When a new version is released, update your Apps Script project to get bug fixes and new features. Your settings are saved automatically and will carry over.
+
+### What's New in v0.3.0
+
+- **Bug fix**: Fatigue breaks no longer incorrectly block time after real breaks between meetings. Previously, a gap between meetings (e.g., free from 2:55pm) could be pushed to 3:25pm because the system treated the break as continuous meeting time.
+- **Slot rounding**: Slot start times are now rounded up to clean increments (default 15 min), so you won't see awkward times like 2:55pm — it becomes 3:00pm instead. Configurable to 5, 10, 15, or 30 minutes in Advanced settings.
+- **Clearer labels**: "Break after" is now "Required break" and "Min gap for break" is now "Ignore gaps under" to better describe what they do.
+
+### How to Update
 
 1. Open your Apps Script project at [script.google.com](https://script.google.com)
-2. Replace the contents of `Code.gs` with the new [`release/Code.gs`](release/Code.gs)
-3. Replace the contents of `index.html` with the new [`release/index.html`](release/index.html)
-4. Click **Deploy** > **Manage deployments**
-5. Click the **pencil icon** on your deployment
-6. Change **Version** to "New version"
-7. Click **Deploy**
+2. Click on `Code.gs` in the file list
+3. Select all (`Ctrl+A`) and delete
+4. Open [`release/Code.gs`](release/Code.gs) in this repository, copy the entire contents, and paste
+5. Click on `index.html` in the file list
+6. Select all (`Ctrl+A`) and delete
+7. Open [`release/index.html`](release/index.html) in this repository, copy the entire contents, and paste
+8. Click **Deploy** > **Manage deployments**
+9. Click the **pencil icon** on your existing deployment
+10. Change **Version** to "New version"
+11. Click **Deploy**
+
+Your bookmarked URL stays the same — just reload the page to see the updated app.
 
 ---
 
