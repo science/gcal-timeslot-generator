@@ -7,7 +7,8 @@ A Google Apps Script web app that reads your Google Calendar and generates copya
 - Scans your Google Calendar for the next N business days (3, 5, or 10)
 - Computes free time slots within configurable working hours
 - **Multi-calendar support** -- select which calendars contribute to busy-time calculation (personal + work, or switch between different people's calendars)
-- **Meeting fatigue breaks** -- automatically inserts buffer time after long meeting blocks
+- **Meeting fatigue breaks** -- automatically inserts buffer time after long meeting blocks, with smart gap classification (micro-gaps merge, short gaps may close, real breaks always preserved)
+- **Slot rounding** -- round slot start times to clean increments (5, 10, 15, or 30 min) so you never propose a meeting at 2:55pm
 - **Timezone display** -- format times in Pacific, Mountain, Central, or Eastern
 - **Include today** -- optionally show remaining availability for the current day
 - Check/uncheck individual slots or entire days before copying
@@ -117,7 +118,9 @@ Click "Advanced settings" to expand:
 |---------|-------------|
 | **Start / End hour** | Working hours window (default 9am-5pm) |
 | **Max meeting block** | Longest meeting block before a forced break (default 2h, or Off to disable) |
-| **Break after** | Duration of the forced break (15-60 min, default 30 min) |
+| **Required break** | Minimum gap that counts as a real break, and the duration of enforced breaks after long blocks (default 30 min) |
+| **Ignore gaps under** | Gaps this short or shorter are treated as continuous meeting time (default 15 min, or Off) |
+| **Round to nearest** | Round slot start times up to the next clean increment (5, 10, 15, or 30 min; default 15) |
 | **Calendars** | Select which calendars count toward "busy" time |
 
 ### Multi-Calendar
@@ -191,7 +194,7 @@ This compiles TypeScript, bundles with Rollup, pushes to Apps Script, creates a 
 
 | Command | Description |
 |---------|-------------|
-| `npm test` | Run Jest unit tests (49 tests) |
+| `npm test` | Run Jest unit tests (79 tests) |
 | `npm run build` | Compile and bundle to `dist/` and `release/` |
 | `npm run push` | Build and push to Apps Script |
 | `npm run deploy` | Build, push, create version, update deployment |
@@ -223,7 +226,7 @@ dist/                   Build output (pushed to Apps Script)
 
 The app runs as a Google Apps Script web app. `Code.ts` is the entry point. The build process (Rollup) bundles all server TypeScript into a single `Code.gs` file and strips ES module syntax (Apps Script runs everything in a shared global scope). The `index.html` is served by `HtmlService`.
 
-Pure computation functions (`mergeBusyBlocks`, `computeFreeSlots`, `applyFatigueBreaks`, `filterPastSlots`) are exported and unit-tested with Jest. The `getAvailableSlots` wrapper calls the Google Calendar API and is not unit-tested (requires the GAS runtime).
+Pure computation functions (`mergeBusyBlocks`, `computeFreeSlots`, `applyFatigueBreaks`, `filterPastSlots`, `roundSlotStarts`) are exported and unit-tested with Jest. The `getAvailableSlots` wrapper calls the Google Calendar API and is not unit-tested (requires the GAS runtime).
 
 ### Running Tests
 
