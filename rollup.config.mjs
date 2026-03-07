@@ -1,6 +1,7 @@
 import typescript from "@rollup/plugin-typescript";
 import copy from "rollup-plugin-copy";
 import { readFileSync, writeFileSync, mkdirSync } from "fs";
+import { execSync } from "child_process";
 import { join } from "path";
 
 // Custom plugin to strip export/import keywords from the bundle
@@ -24,7 +25,11 @@ function copyHtml() {
     writeBundle() {
       mkdirSync("dist", { recursive: true });
       mkdirSync("release", { recursive: true });
-      const html = readFileSync("src/pages/index.html", "utf-8");
+      // Inject git version info into HTML
+      const gitHash = execSync("git describe --always --dirty", { encoding: "utf-8" }).trim();
+      const gitDate = execSync("git log -1 --format=%ci", { encoding: "utf-8" }).trim().slice(0, 10);
+      let html = readFileSync("src/pages/index.html", "utf-8");
+      html = html.replaceAll("__GIT_HASH__", gitHash).replace("__GIT_DATE__", gitDate);
       writeFileSync(join("dist", "index.html"), html);
       // Copy built files to release/ for non-developer distribution
       const code = readFileSync("dist/Code.gs", "utf-8");

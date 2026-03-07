@@ -273,6 +273,22 @@
       font-size: 13px;
       margin-bottom: 12px;
     }
+
+    .version-tag {
+      text-align: right;
+      font-size: 11px;
+      color: #9aa0a6;
+      margin-top: 12px;
+    }
+
+    .version-tag a {
+      color: #9aa0a6;
+      text-decoration: none;
+    }
+
+    .version-tag a:hover {
+      text-decoration: underline;
+    }
   </style>
 </head>
 <body>
@@ -399,6 +415,11 @@
     <div class="spinner"></div>
     <div>Loading your availability...</div>
   </div>
+</div>
+
+<div class="version-tag">
+  <a href="https://github.com/science/gcal-timeslot-generator/commit/__GIT_HASH__"
+     target="_blank" rel="noopener">__GIT_HASH__</a> · __GIT_DATE__
 </div>
 
 <script>

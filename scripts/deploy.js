@@ -12,6 +12,14 @@ const { version } = require("../package.json");
 
 const run = (cmd) => execSync(cmd, { encoding: "utf-8" }).trim();
 
+// 0. Abort if working tree is dirty — version hash would not match deployed code
+const status = run("git status --porcelain");
+if (status) {
+  console.error("ERROR: Uncommitted changes detected. Commit first so the version hash matches the deployed code.");
+  console.error(status);
+  process.exit(1);
+}
+
 // 1. Find the non-HEAD deployment ID
 const depOutput = run("npx @google/clasp deployments");
 const match = depOutput.match(/^- (AKfycb\S+) @\d+/m);

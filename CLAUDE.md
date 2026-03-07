@@ -8,10 +8,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run build          # Clean + Rollup bundle → dist/
 npm test               # Run all Jest tests
 npm run deploy         # Full cycle: build → clasp push → create version → update deployment
-npm run push           # Build + push to Apps Script (no new version)
+npm run push           # Build + push to Apps Script (HEAD only — NOT production)
 npm run watch          # Rollup watch mode for development
 npm run open           # Open deployed web app in browser
 ```
+
+**IMPORTANT:** When asked to "push to production", "deploy via clasp", or "push with clasp", always:
+1. Run tests: `npm test`
+2. Commit all changes (the deploy script **refuses to run with uncommitted changes** so the version hash in the UI matches the deployed code)
+3. Deploy: `npm run deploy`
+
+Never use `npm run push` for production — it only updates the HEAD deployment, which is NOT what users access. Only `deploy` creates a versioned deployment that updates the live web app.
 
 Run a single test file:
 ```bash
@@ -65,6 +72,7 @@ Internals:
 - `scripts/deploy.js` auto-discovers the non-HEAD deployment ID via clasp output
 - Clasp syntax: `clasp deploy -i <id> -V <version>` (not `--deploymentId`)
 - `release/` folder has pre-built files for non-developer distribution
+- Build injects `__GIT_HASH__` and `__GIT_DATE__` placeholders in `index.html` with the current git commit (version indicator visible in the UI footer, links to GitHub commit)
 
 ## Testing & TDD
 

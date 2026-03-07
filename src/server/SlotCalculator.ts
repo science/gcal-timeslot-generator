@@ -184,6 +184,35 @@ export function applyFatigueBreaks(
     merged = closed;
   }
 
+  // Phase 1.5: Protect "real break" gaps from being fully booked.
+  // If booking an entire gap would bridge two blocks into a continuous run
+  // exceeding maxContinuousMinutes, insert a protective busy block to limit
+  // bookable time and preserve a forced break before the next block.
+  const gapProtected: BusyBlock[] = [];
+  for (let i = 0; i < merged.length; i++) {
+    gapProtected.push({ ...merged[i] });
+    if (i < merged.length - 1) {
+      const prev = merged[i];
+      const next = merged[i + 1];
+      const prevDur = (prev.end - prev.start) / 60000;
+      const gapMin = (next.start - prev.end) / 60000;
+      const nextDur = (next.end - next.start) / 60000;
+      if (prevDur + gapMin + nextDur > maxContinuousMinutes) {
+        const leftAllowable = Math.max(0, Math.min(
+          maxContinuousMinutes - prevDur,
+          gapMin - minBreakMinutes
+        ));
+        if (leftAllowable < gapMin) {
+          gapProtected.push({
+            start: prev.end + leftAllowable * 60000,
+            end: next.start,
+          });
+        }
+      }
+    }
+  }
+  merged = gapProtected;
+
   // Then extend blocks at or over the threshold by break minutes
   const extended: BusyBlock[] = merged.map((b) => {
     const durationMin = (b.end - b.start) / 60000;
