@@ -117,21 +117,31 @@ describe("Thursday Apr 16 — no '(max 2h)' annotation", () => {
   });
 });
 
-describe("annotation rule — small constrained slots", () => {
-  it("annotates a slot where X < 60 and slot length > X", () => {
-    // 1.5h prev + 90-min gap + 1h next: every grid-aligned start in the
-    // gap touches either side on a longer-meeting attempt, and X=30.
-    // Slot length is 90 min, so the (max 30m) annotation applies.
+describe("fallback — split into individual slots when no core reaches 60", () => {
+  it("1.5h + 1h gap + 1h: splits the 12-1 gap into two 30-min slots instead of annotating", () => {
+    // busy: [10:30-12, 13-14]. Gap [12, 13] has every sub-range
+    // capped at 30 min. Emit two 30-min slots instead of
+    // "12pm-1pm (max 30 min)".
     const busy: BusyBlock[] = [
-      { start: t(9), end: t(10, 30) },   // 1.5h prev
-      { start: t(12), end: t(13) },       // 1h next
+      { start: t(10, 30), end: t(12) },
+      { start: t(13), end: t(14) },
     ];
     const slots = run(busy);
-    const middle = slots.find(
-      (s) => new Date(s.start).getTime() === t(10, 30) && new Date(s.end).getTime() === t(12),
+    const a = slots.find(
+      (s) => new Date(s.start).getTime() === t(12) && new Date(s.end).getTime() === t(12, 30),
     );
-    expect(middle).toBeDefined();
-    expect(middle!.maxMinutes).toBe(30);
+    const b = slots.find(
+      (s) => new Date(s.start).getTime() === t(12, 30) && new Date(s.end).getTime() === t(13),
+    );
+    expect(a).toBeDefined();
+    expect(a!.maxMinutes).toBeUndefined();
+    expect(b).toBeDefined();
+    expect(b!.maxMinutes).toBeUndefined();
+    // Ensure the "one big annotated slot" version is NOT present.
+    const big = slots.find(
+      (s) => new Date(s.start).getTime() === t(12) && new Date(s.end).getTime() === t(13),
+    );
+    expect(big).toBeUndefined();
   });
 
   it("does not annotate a slot whose length equals its max duration", () => {
@@ -164,6 +174,79 @@ describe("grid-aligned cleanliness — no 15-min stragglers poison slots", () =>
     );
     expect(trailing).toBeDefined();
     expect(trailing!.maxMinutes).toBeUndefined();
+  });
+});
+
+describe("boundary-trim splitting — preserve big core slots", () => {
+  it("1.5h + 2h gap + 30min: splits off tight 10:30-11 and keeps 11-12:30 full", () => {
+    // busy: [9-10:30, 12:30-1]. The 10:30 start has X=30 (touches 1.5h
+    // prev block tightly), but dropping it leaves a [11, 12:30] core
+    // where X=90. Expected: '10:30am-11am' + '11am-12:30pm', both
+    // unannotated.
+    const busy: BusyBlock[] = [
+      { start: t(9), end: t(10, 30) },
+      { start: t(12, 30), end: t(13) },
+    ];
+    const slots = run(busy);
+    // 10:30-11 and 11-12:30 must both be present, both without annotation.
+    const first = slots.find(
+      (s) => new Date(s.start).getTime() === t(10, 30) && new Date(s.end).getTime() === t(11),
+    );
+    const core = slots.find(
+      (s) => new Date(s.start).getTime() === t(11) && new Date(s.end).getTime() === t(12, 30),
+    );
+    expect(first).toBeDefined();
+    expect(first!.maxMinutes).toBeUndefined();
+    expect(core).toBeDefined();
+    expect(core!.maxMinutes).toBeUndefined();
+  });
+
+  it("30min prev + 2h gap + 1.5h next: splits off tight tail and keeps 9-10:30 full", () => {
+    // busy: [9:30-10, 12-1:30]. The 11:30 tail start touches the
+    // 1.5h next block too tightly (run 90+60=150). Dropping it leaves
+    // a [10, 11:30] core where X=90. Expected split: big core first,
+    // 30-min tail.
+    const busy: BusyBlock[] = [
+      { start: t(9, 30), end: t(10) },
+      { start: t(12), end: t(13, 30) },
+    ];
+    const slots = run(busy);
+    const core = slots.find(
+      (s) => new Date(s.start).getTime() === t(10) && new Date(s.end).getTime() === t(11, 30),
+    );
+    const tail = slots.find(
+      (s) => new Date(s.start).getTime() === t(11, 30) && new Date(s.end).getTime() === t(12),
+    );
+    expect(core).toBeDefined();
+    expect(core!.maxMinutes).toBeUndefined();
+    expect(tail).toBeDefined();
+    expect(tail!.maxMinutes).toBeUndefined();
+  });
+
+  it("1.5h + 2h gap + 1.5h: three slots — tight ends, unannotated middle", () => {
+    // busy: [9-10:30, 12:30-2]. Both edges are tight (each touches
+    // 1.5h bookend). Middle [11, 12] supports d=60 own-run. Expect
+    // three slots, none annotated.
+    const busy: BusyBlock[] = [
+      { start: t(9), end: t(10, 30) },
+      { start: t(12, 30), end: t(14) },
+    ];
+    const slots = run(busy);
+    const first = slots.find(
+      (s) => new Date(s.start).getTime() === t(10, 30) && new Date(s.end).getTime() === t(11),
+    );
+    const middle = slots.find(
+      (s) => new Date(s.start).getTime() === t(11) && new Date(s.end).getTime() === t(12),
+    );
+    const last = slots.find(
+      (s) => new Date(s.start).getTime() === t(12) && new Date(s.end).getTime() === t(12, 30),
+    );
+    expect(first).toBeDefined();
+    expect(first!.maxMinutes).toBeUndefined();
+    expect(middle).toBeDefined();
+    expect(middle!.maxMinutes).toBeUndefined();
+    expect(last).toBeDefined();
+    expect(last!.maxMinutes).toBeUndefined();
   });
 });
 

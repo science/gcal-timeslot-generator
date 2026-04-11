@@ -242,8 +242,7 @@ function nextGridStart(ms: number, dayStartMs: number, minMs: number): number {
 
 /**
  * For one raw free gap [a, b] bounded by (optional) left and right runs,
- * emit non-overlapping slots: one per contiguous region of valid minMs
- * meeting starts on the grid. Grid starts are anchored at dayStartMs.
+ * emit non-overlapping slots. Grid starts are anchored at dayStartMs.
  */
 function slotsForGap(
   a: number,
@@ -265,13 +264,12 @@ function slotsForGap(
   // threshold, so the whole gap is unconstrained. Single slot, no
   // annotation (the slot's own length is the cap, and that cap ≤ maxMs).
   if (L + G + R <= maxMs) {
-    // Align to grid so the emitted slot starts at a clean boundary.
     const aligned = nextGridStart(a, dayStartMs, minMs);
     if (aligned + minMs > b) return [];
     return [makeSlot(aligned, b)];
   }
 
-  // Find every grid-aligned start where a minMs meeting is valid.
+  // Enumerate valid grid-aligned minMs meeting starts in the gap.
   // Starts are anchored to dayStartMs so a meeting ending at 10:45
   // doesn't cause the next slot's grid to be offset by 15 minutes.
   const validStarts: number[] = [];
@@ -283,38 +281,112 @@ function slotsForGap(
   }
   if (validStarts.length === 0) return [];
 
-  // Group consecutive grid-aligned valid starts into runs. Each run
-  // becomes one slot.
-  const out: TimeSlot[] = [];
-  let runStart = validStarts[0];
-  let runEndStart = validStarts[0];
+  // Split the valid-starts list into maximal contiguous runs (on the
+  // minMs grid). Each contiguous run is an independent emission region
+  // because a hole in the valid-starts list means some meeting start
+  // between them is unsafe, so we can't pretend the two halves are one.
+  const regions: number[][] = [];
+  let cur: number[] = [validStarts[0]];
   for (let i = 1; i < validStarts.length; i++) {
-    if (validStarts[i] === runEndStart + minMs) {
-      runEndStart = validStarts[i];
+    if (validStarts[i] === cur[cur.length - 1] + minMs) {
+      cur.push(validStarts[i]);
     } else {
-      out.push(emitSlot(runStart, runEndStart + minMs, left, right, maxMs, breakMs, minMs));
-      runStart = validStarts[i];
-      runEndStart = validStarts[i];
+      regions.push(cur);
+      cur = [validStarts[i]];
     }
   }
-  out.push(emitSlot(runStart, runEndStart + minMs, left, right, maxMs, breakMs, minMs));
+  regions.push(cur);
+
+  const out: TimeSlot[] = [];
+  for (const region of regions) {
+    out.push(...emitForRegion(region, left, right, maxMs, breakMs, minMs));
+  }
   return out;
 }
 
-function emitSlot(
-  slotStart: number,
-  slotEnd: number,
+/**
+ * Emit slots for one contiguous run of valid grid-aligned minMs starts.
+ *
+ * Strategy: try the whole region first. If its X (max uniformly valid
+ * duration) is ≥ 60 min, emit a single unannotated slot. Otherwise,
+ * search for the longest sub-range [i..j] whose X ≥ 60 min and peel it
+ * out as the "core" slot; recursively emit the prefix and suffix as
+ * separate slots. This preserves a boundary-constrained position (e.g.
+ * a start that tightly touches a 2hr bookend) as its own short slot
+ * rather than dragging a whole 1-hour-capable slot down to "max 30 min".
+ * Falls back to a single annotated slot when no sub-range is ≥ 60.
+ */
+function emitForRegion(
+  starts: number[],
   left: Run | undefined,
   right: Run | undefined,
   maxMs: number,
   breakMs: number,
   minMs: number,
-): TimeSlot {
+): TimeSlot[] {
+  if (starts.length === 0) return [];
+
+  const slotStart = starts[0];
+  const slotEnd = starts[starts.length - 1] + minMs;
   const X = maxValidDurationInRegion(slotStart, slotEnd, left, right, maxMs, breakMs, minMs);
+
+  if (X >= NORMAL_MEETING_MAX_MS || starts.length === 1) {
+    return [slotWithCap(slotStart, slotEnd, X)];
+  }
+
+  // Find the largest contiguous sub-range [i..j] whose core slot has
+  // X ≥ NORMAL_MEETING_MAX_MS. Prefer longer ranges; ties broken by
+  // earlier start.
+  let bestI = -1;
+  let bestJ = -1;
+  let bestLen = 0;
+  for (let i = 0; i < starts.length; i++) {
+    for (let j = i; j < starts.length; j++) {
+      const coreStart = starts[i];
+      const coreEnd = starts[j] + minMs;
+      const coreX = maxValidDurationInRegion(coreStart, coreEnd, left, right, maxMs, breakMs, minMs);
+      if (coreX >= NORMAL_MEETING_MAX_MS) {
+        const len = j - i + 1;
+        if (len > bestLen) {
+          bestLen = len;
+          bestI = i;
+          bestJ = j;
+        }
+      }
+    }
+  }
+
+  if (bestI === -1) {
+    // No core reaches the normal-meeting threshold. Rather than emit one
+    // big annotated slot (which hides structure), split into individual
+    // minMs-length slots — each stands alone as a clearly-bounded 30 min
+    // option. Recipient sees two "1pm-1:30pm, 1:30pm-2pm" entries instead
+    // of a single confusing "1pm-2pm (max 30 min)".
+    return starts.map((s) => slotWithCap(s, s + minMs, minMs));
+  }
+
+  const prefix = starts.slice(0, bestI);
+  const core = starts.slice(bestI, bestJ + 1);
+  const suffix = starts.slice(bestJ + 1);
+  const coreStart = core[0];
+  const coreEnd = core[core.length - 1] + minMs;
+  const coreX = maxValidDurationInRegion(coreStart, coreEnd, left, right, maxMs, breakMs, minMs);
+
+  return [
+    ...emitForRegion(prefix, left, right, maxMs, breakMs, minMs),
+    slotWithCap(coreStart, coreEnd, coreX),
+    ...emitForRegion(suffix, left, right, maxMs, breakMs, minMs),
+  ];
+}
+
+/**
+ * Wrap a slot range with an optional maxMinutes annotation: only
+ * annotate when the effective cap is under the normal-meeting ceiling
+ * AND the slot has more room than that cap (otherwise the length
+ * communicates the cap on its own).
+ */
+function slotWithCap(slotStart: number, slotEnd: number, X: number): TimeSlot {
   const slotLen = slotEnd - slotStart;
-  // Annotate only when the slot is more restrictive than a normal
-  // 1-hour meeting AND the slot is bigger than its cap (otherwise the
-  // length already communicates the cap).
   let maxMinutes: number | undefined;
   if (X < NORMAL_MEETING_MAX_MS && slotLen > X) {
     maxMinutes = X / 60000;
