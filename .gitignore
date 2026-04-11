@@ -2,3 +2,7 @@ node_modules/
 dist/
 .clasp.json
 clasp-auth-code.txt
+
+# Local data dumps (user's calendar exports for debugging)
+calc-avail.txt
+*.ical.zip
