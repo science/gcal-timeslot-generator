@@ -18,7 +18,6 @@ function getNextBusinessDays(numDays, includeToday, endHour) {
     const current = new Date();
     current.setHours(0, 0, 0, 0);
     if (includeToday) {
-        // Include today only if it's a weekday and before endHour
         const dow = current.getDay();
         if (dow !== 0 && dow !== 6 && now.getHours() < endHour) {
             days.push(new Date(current));
@@ -26,7 +25,6 @@ function getNextBusinessDays(numDays, includeToday, endHour) {
         current.setDate(current.getDate() + 1);
     }
     else {
-        // Start from tomorrow
         current.setDate(current.getDate() + 1);
     }
     while (days.length < numDays) {
@@ -77,32 +75,158 @@ function mergeBusyBlocks(blocks) {
     }
     return merged;
 }
-function computeFreeSlots(mergedBlocks, dayStartMs, dayEndMs, minMinutes) {
-    const slots = [];
-    let cursor = dayStartMs;
-    for (const block of mergedBlocks) {
-        if (block.start > cursor) {
-            const gapMinutes = (block.start - cursor) / 60000;
-            if (gapMinutes >= minMinutes) {
-                slots.push({
-                    start: new Date(cursor).toISOString(),
-                    end: new Date(block.start).toISOString(),
-                });
+/** Group already-merged busy blocks into runs separated by gaps ≥ minBreakMs. */
+function groupRuns(merged, minBreakMs) {
+    if (merged.length === 0)
+        return [];
+    const runs = [{ start: merged[0].start, end: merged[0].end }];
+    for (let i = 1; i < merged.length; i++) {
+        const last = runs[runs.length - 1];
+        if (merged[i].start - last.end < minBreakMs) {
+            last.end = Math.max(last.end, merged[i].end);
+        }
+        else {
+            runs.push({ start: merged[i].start, end: merged[i].end });
+        }
+    }
+    return runs;
+}
+function roundStart(ms, roundMs) {
+    if (roundMs <= 0)
+        return ms;
+    const r = ms % roundMs;
+    return r === 0 ? ms : ms + (roundMs - r);
+}
+function makeSlot(start, end, maxMin) {
+    const slot = {
+        start: new Date(start).toISOString(),
+        end: new Date(end).toISOString(),
+    };
+    if (maxMin !== undefined)
+        slot.maxMinutes = maxMin;
+    return slot;
+}
+/**
+ * For one raw free gap [a, b] bounded by (optional) left and right runs,
+ * emit the set of sound slot candidates.
+ */
+function slotsForGap(a, b, left, right, maxMs, breakMs, minMs) {
+    const G = b - a;
+    if (G < minMs)
+        return [];
+    const L = left ? left.end - left.start : 0;
+    const R = right ? right.end - right.start : 0;
+    // Fast path: even a full-gap meeting that touches both neighbors is
+    // under threshold. Single unconstrained slot.
+    if (L + G + R <= maxMs) {
+        // Max meeting duration here is G, which is ≤ maxMs − L − R ≤ maxMs.
+        return [makeSlot(a, b)];
+    }
+    const out = [];
+    // LEFT-ANCHORED: meetings touching the left run. Only produced when a
+    // left run exists; otherwise "touching left" is vacuous and the C slot
+    // covers the day-start edge.
+    if (left) {
+        const leftAllow = Math.max(0, maxMs - L);
+        // If a right run exists we must not extend into its break zone, or
+        // we'd leak into "touching both" territory which we know is unsafe.
+        const leftEnd = right
+            ? Math.min(a + leftAllow, b - breakMs)
+            : Math.min(a + leftAllow, b);
+        if (leftEnd - a >= minMs) {
+            out.push(makeSlot(a, leftEnd));
+        }
+    }
+    // RIGHT-ANCHORED: symmetric.
+    if (right) {
+        const rightAllow = Math.max(0, maxMs - R);
+        const rightStart = left
+            ? Math.max(b - rightAllow, a + breakMs)
+            : Math.max(b - rightAllow, a);
+        if (b - rightStart >= minMs) {
+            out.push(makeSlot(rightStart, b));
+        }
+    }
+    // MIDDLE ISLAND: meetings that sit far enough from both neighbors to
+    // form their own run. The island is capped at maxMs duration because a
+    // longer meeting would violate (2) even without touching neighbors.
+    const mStart = left ? a + breakMs : a;
+    const mEnd = right ? b - breakMs : b;
+    const mLen = mEnd - mStart;
+    if (mLen >= minMs) {
+        const maxDurMs = Math.min(mLen, maxMs);
+        const maxMin = maxDurMs < mLen ? maxDurMs / 60000 : undefined;
+        out.push(makeSlot(mStart, mEnd, maxMin));
+    }
+    return out;
+}
+/** Drop any slot fully contained in another slot with a looser-or-equal constraint. */
+function dedupeContained(slots) {
+    const withMs = slots.map((s) => {
+        var _a;
+        return ({
+            slot: s,
+            start: new Date(s.start).getTime(),
+            end: new Date(s.end).getTime(),
+            maxMs: ((_a = s.maxMinutes) !== null && _a !== void 0 ? _a : Infinity) * 60000,
+        });
+    });
+    const keep = withMs.map(() => true);
+    for (let i = 0; i < withMs.length; i++) {
+        if (!keep[i])
+            continue;
+        for (let j = 0; j < withMs.length; j++) {
+            if (i === j || !keep[j])
+                continue;
+            const A = withMs[i];
+            const B = withMs[j];
+            // A is contained in B and B's constraint is at least as loose → drop A.
+            if (B.start <= A.start && B.end >= A.end && B.maxMs >= A.maxMs) {
+                // Avoid mutual elimination when the two slots are equal.
+                if (A.start === B.start && A.end === B.end && A.maxMs === B.maxMs) {
+                    if (i > j)
+                        keep[i] = false;
+                }
+                else {
+                    keep[i] = false;
+                }
+                break;
             }
         }
-        cursor = Math.max(cursor, block.end);
     }
-    // Trailing free time after last block
-    if (cursor < dayEndMs) {
-        const gapMinutes = (dayEndMs - cursor) / 60000;
-        if (gapMinutes >= minMinutes) {
-            slots.push({
-                start: new Date(cursor).toISOString(),
-                end: new Date(dayEndMs).toISOString(),
-            });
+    return withMs.filter((_, i) => keep[i]).map((w) => w.slot);
+}
+function computeFreeSlotsWithFatigue(busy, dayStartMs, dayEndMs, opts) {
+    const maxMs = opts.maxContinuousMinutes * 60000;
+    const breakMs = opts.minBreakMinutes * 60000;
+    const minMs = opts.minMinutes * 60000;
+    // Clip busy blocks to the day window, drop empties, merge overlaps.
+    const clipped = [];
+    for (const b of busy) {
+        const s = Math.max(b.start, dayStartMs);
+        const e = Math.min(b.end, dayEndMs);
+        if (s < e)
+            clipped.push({ start: s, end: e });
+    }
+    const merged = mergeBusyBlocks(clipped);
+    const runs = groupRuns(merged, breakMs);
+    // Walk day start → end, emitting slots for each raw gap.
+    const slots = [];
+    let cursor = dayStartMs;
+    for (let i = 0; i < runs.length; i++) {
+        const run = runs[i];
+        if (run.start > cursor) {
+            const leftRun = i > 0 ? runs[i - 1] : undefined;
+            const gapLeft = leftRun && leftRun.end >= cursor ? leftRun : undefined;
+            slots.push(...slotsForGap(cursor, run.start, gapLeft, run, maxMs, breakMs, minMs));
         }
+        cursor = Math.max(cursor, run.end);
     }
-    return slots;
+    if (cursor < dayEndMs) {
+        const leftRun = runs.length > 0 ? runs[runs.length - 1] : undefined;
+        slots.push(...slotsForGap(cursor, dayEndMs, leftRun, undefined, maxMs, breakMs, minMs));
+    }
+    return dedupeContained(slots);
 }
 function filterPastSlots(slots, nowMs) {
     const result = [];
@@ -110,10 +234,12 @@ function filterPastSlots(slots, nowMs) {
         const startMs = new Date(slot.start).getTime();
         const endMs = new Date(slot.end).getTime();
         if (endMs <= nowMs)
-            continue; // entirely in the past
+            continue;
         if (startMs < nowMs) {
-            // Truncate: start becomes now
-            result.push({ start: new Date(nowMs).toISOString(), end: slot.end });
+            const next = { start: new Date(nowMs).toISOString(), end: slot.end };
+            if (slot.maxMinutes !== undefined)
+                next.maxMinutes = slot.maxMinutes;
+            result.push(next);
         }
         else {
             result.push(slot);
@@ -121,112 +247,23 @@ function filterPastSlots(slots, nowMs) {
     }
     return result;
 }
-function applyFatigueBreaks(blocks, maxContinuousMinutes, minBreakMinutes, minGapMinutes, dayEndMs) {
-    if (maxContinuousMinutes <= 0)
-        return blocks;
-    // Phase 0: Merge blocks separated by gaps <= minGapMinutes (these don't count as real breaks)
-    let merged = mergeBusyBlocks(blocks);
-    if (merged.length === 0)
-        return [];
-    if (minGapMinutes > 0) {
-        const gapMerged = [{ ...merged[0] }];
-        for (let i = 1; i < merged.length; i++) {
-            const prev = gapMerged[gapMerged.length - 1];
-            const gapMin = (merged[i].start - prev.end) / 60000;
-            if (gapMin <= minGapMinutes) {
-                gapMerged[gapMerged.length - 1] = { start: prev.start, end: merged[i].end };
-            }
-            else {
-                gapMerged.push({ ...merged[i] });
-            }
-        }
-        merged = gapMerged;
-    }
-    // Phase 1: Close gaps where filling them would exceed maxContinuousMinutes.
-    // A gap between two blocks that, if booked, creates a combined block over
-    // the threshold should not be offered as available time.
-    let changed = true;
-    while (changed) {
-        changed = false;
-        const closed = [{ ...merged[0] }];
-        for (let i = 1; i < merged.length; i++) {
-            const prev = closed[closed.length - 1];
-            const curr = merged[i];
-            const prevMin = (prev.end - prev.start) / 60000;
-            const gapMin = (curr.start - prev.end) / 60000;
-            const currMin = (curr.end - curr.start) / 60000;
-            if (gapMin < minBreakMinutes && prevMin + gapMin + currMin > maxContinuousMinutes) {
-                closed[closed.length - 1] = { start: prev.start, end: curr.end };
-                changed = true;
-            }
-            else {
-                closed.push({ ...curr });
-            }
-        }
-        merged = closed;
-    }
-    // Phase 1.5: Protect "real break" gaps from being fully booked.
-    // If booking an entire gap would bridge two blocks into a continuous run
-    // exceeding maxContinuousMinutes, insert a protective busy block to limit
-    // bookable time and preserve a forced break before the next block.
-    const gapProtected = [];
-    for (let i = 0; i < merged.length; i++) {
-        gapProtected.push({ ...merged[i] });
-        if (i < merged.length - 1) {
-            const prev = merged[i];
-            const next = merged[i + 1];
-            const prevDur = (prev.end - prev.start) / 60000;
-            const gapMin = (next.start - prev.end) / 60000;
-            const nextDur = (next.end - next.start) / 60000;
-            if (prevDur + gapMin + nextDur > maxContinuousMinutes) {
-                const leftAllowable = Math.max(0, Math.min(maxContinuousMinutes - prevDur, gapMin - minBreakMinutes));
-                if (leftAllowable < gapMin) {
-                    gapProtected.push({
-                        start: prev.end + leftAllowable * 60000,
-                        end: next.start,
-                    });
-                }
-            }
-        }
-    }
-    merged = gapProtected;
-    // Then extend blocks at or over the threshold by break minutes
-    const extended = merged.map((b) => {
-        const durationMin = (b.end - b.start) / 60000;
-        if (durationMin >= maxContinuousMinutes) {
-            return { start: b.start, end: Math.min(b.end + minBreakMinutes * 60000, dayEndMs) };
-        }
-        return { ...b };
-    });
-    return mergeBusyBlocks(extended);
-}
-function applyFatiguePerCalendar(blocksByCalendar, maxContinuousMinutes, minBreakMinutes, minGapMinutes, dayEndMs) {
-    const allBlocks = [];
-    for (const calBlocks of blocksByCalendar) {
-        const merged = mergeBusyBlocks(calBlocks);
-        const withFatigue = applyFatigueBreaks(merged, maxContinuousMinutes, minBreakMinutes, minGapMinutes, dayEndMs);
-        allBlocks.push(...withFatigue);
-    }
-    return mergeBusyBlocks(allBlocks);
-}
 function roundSlotStarts(slots, roundMinutes, minMinutes) {
     if (roundMinutes <= 0)
         return slots;
     const roundMs = roundMinutes * 60000;
-    const result = [];
+    const out = [];
     for (const slot of slots) {
         const startMs = new Date(slot.start).getTime();
         const endMs = new Date(slot.end).getTime();
-        const remainder = startMs % roundMs;
-        const roundedStart = remainder === 0 ? startMs : startMs + (roundMs - remainder);
-        if ((endMs - roundedStart) / 60000 >= minMinutes) {
-            result.push({
-                start: new Date(roundedStart).toISOString(),
-                end: slot.end,
-            });
+        const rs = roundStart(startMs, roundMs);
+        if ((endMs - rs) / 60000 >= minMinutes) {
+            const next = { start: new Date(rs).toISOString(), end: slot.end };
+            if (slot.maxMinutes !== undefined)
+                next.maxMinutes = slot.maxMinutes;
+            out.push(next);
         }
     }
-    return result;
+    return out;
 }
 function resolveCalendars(calendarIds) {
     const calendars = [];
@@ -242,16 +279,57 @@ function resolveCalendars(calendarIds) {
     }
     return calendars;
 }
+/**
+ * Intersect two sets of TimeSlots. The intersection of [a1,b1] and [a2,b2]
+ * is [max(a1,a2), min(b1,b2)] when non-empty, carrying the tighter
+ * maxMinutes constraint. Slots shorter than minMinutes after intersection
+ * are dropped.
+ */
+function intersectSlotSets(a, b, minMinutes) {
+    var _a, _b;
+    const out = [];
+    for (const s1 of a) {
+        const s1s = new Date(s1.start).getTime();
+        const s1e = new Date(s1.end).getTime();
+        for (const s2 of b) {
+            const s2s = new Date(s2.start).getTime();
+            const s2e = new Date(s2.end).getTime();
+            const start = Math.max(s1s, s2s);
+            const end = Math.min(s1e, s2e);
+            if (end - start < minMinutes * 60000)
+                continue;
+            const cap1 = (_a = s1.maxMinutes) !== null && _a !== void 0 ? _a : Infinity;
+            const cap2 = (_b = s2.maxMinutes) !== null && _b !== void 0 ? _b : Infinity;
+            const cap = Math.min(cap1, cap2);
+            const slot = {
+                start: new Date(start).toISOString(),
+                end: new Date(end).toISOString(),
+            };
+            if (cap !== Infinity)
+                slot.maxMinutes = cap;
+            out.push(slot);
+        }
+    }
+    return dedupeContained(out);
+}
 function getAvailableSlots(options) {
     const opts = { ...getDefaultSlotOptions(), ...options };
     const calendars = resolveCalendars(opts.calendarIds);
     const businessDays = getNextBusinessDays(opts.numDays, opts.includeToday, opts.endHour);
     const result = [];
+    const fatigueOpts = {
+        maxContinuousMinutes: opts.maxContinuousMinutes,
+        minBreakMinutes: opts.minBreakMinutes,
+        minMinutes: opts.minMinutes,
+    };
     for (const day of businessDays) {
         const dayStart = new Date(day);
         dayStart.setHours(opts.startHour, 0, 0, 0);
         const dayEnd = new Date(day);
         dayEnd.setHours(opts.endHour, 0, 0, 0);
+        const dayStartMs = dayStart.getTime();
+        const dayEndMs = dayEnd.getTime();
+        // Collect raw busy blocks per calendar.
         const blocksByCalendar = [];
         for (const calendar of calendars) {
             const calBlocks = [];
@@ -261,26 +339,27 @@ function getAvailableSlots(options) {
                     continue;
                 if (isTransparentAllDay(event))
                     continue;
-                const evStart = event.getStartTime().getTime();
-                const evEnd = event.getEndTime().getTime();
                 calBlocks.push({
-                    start: Math.max(evStart, dayStart.getTime()),
-                    end: Math.min(evEnd, dayEnd.getTime()),
+                    start: Math.max(event.getStartTime().getTime(), dayStartMs),
+                    end: Math.min(event.getEndTime().getTime(), dayEndMs),
                 });
             }
             blocksByCalendar.push(calBlocks);
         }
-        let withBreaks;
+        let slots;
         if (opts.calendarMode === 'group' && blocksByCalendar.length > 1) {
-            withBreaks = applyFatiguePerCalendar(blocksByCalendar, opts.maxContinuousMinutes, opts.minBreakMinutes, opts.minGapMinutes, dayEnd.getTime());
+            // Each calendar is a distinct person. Compute per-person free slots
+            // under that person's fatigue rules, then intersect the sets.
+            const perPerson = blocksByCalendar.map((b) => computeFreeSlotsWithFatigue(b, dayStartMs, dayEndMs, fatigueOpts));
+            slots = perPerson[0];
+            for (let i = 1; i < perPerson.length; i++) {
+                slots = intersectSlotSets(slots, perPerson[i], opts.minMinutes);
+            }
         }
         else {
             const allBlocks = blocksByCalendar.flat();
-            const merged = mergeBusyBlocks(allBlocks);
-            withBreaks = applyFatigueBreaks(merged, opts.maxContinuousMinutes, opts.minBreakMinutes, opts.minGapMinutes, dayEnd.getTime());
+            slots = computeFreeSlotsWithFatigue(allBlocks, dayStartMs, dayEndMs, fatigueOpts);
         }
-        let slots = computeFreeSlots(withBreaks, dayStart.getTime(), dayEnd.getTime(), opts.minMinutes);
-        // If today, filter out past slots
         const now = new Date();
         const today = new Date();
         today.setHours(0, 0, 0, 0);
@@ -308,6 +387,13 @@ function formatTime(isoString) {
     const minuteStr = minutes === 0 ? "" : `:${String(minutes).padStart(2, "0")}`;
     return `${hours}${minuteStr}${ampm}`;
 }
+function durationSuffix(slot) {
+    if (slot.maxMinutes === undefined)
+        return "";
+    return slot.maxMinutes >= 60 && slot.maxMinutes % 60 === 0
+        ? ` (max ${slot.maxMinutes / 60}h)`
+        : ` (max ${slot.maxMinutes} min)`;
+}
 function formatSlotsBullets(days) {
     if (days.length === 0)
         return "No availability found for the selected period.";
@@ -315,11 +401,10 @@ function formatSlotsBullets(days) {
     for (const day of days) {
         lines.push(`${day.dayLabel}:`);
         for (const slot of day.slots) {
-            lines.push(`  - ${formatTime(slot.start)} - ${formatTime(slot.end)}`);
+            lines.push(`  - ${formatTime(slot.start)} - ${formatTime(slot.end)}${durationSuffix(slot)}`);
         }
         lines.push("");
     }
-    // Remove trailing blank line
     if (lines[lines.length - 1] === "")
         lines.pop();
     return lines.join("\n");
@@ -329,7 +414,7 @@ function formatSlotsCompact(days) {
         return "No availability found for the selected period.";
     const lines = ["Available (Pacific):"];
     for (const day of days) {
-        const slotStrs = day.slots.map((s) => `${formatTime(s.start)}-${formatTime(s.end)}`);
+        const slotStrs = day.slots.map((s) => `${formatTime(s.start)}-${formatTime(s.end)}${durationSuffix(s)}`);
         lines.push(`${day.dayLabel}: ${slotStrs.join(", ")}`);
     }
     return lines.join("\n");

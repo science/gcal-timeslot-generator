@@ -418,8 +418,8 @@
 </div>
 
 <div class="version-tag">
-  <a href="https://github.com/science/gcal-timeslot-generator/commit/e25a1d6-dirty"
-     target="_blank" rel="noopener">e25a1d6-dirty</a> · 2026-03-06
+  <a href="https://github.com/science/gcal-timeslot-generator/commit/0547e56"
+     target="_blank" rel="noopener">0547e56</a> · 2026-04-11
 </div>
 
 <script>
@@ -600,7 +600,7 @@
         var slot = day.slots[s];
         html += '<div class="slot-item">';
         html += '<input type="checkbox" checked data-day="' + d + '" data-slot="' + s + '" onchange="updatePreview()">';
-        html += '<span class="slot-time">' + fmtTime(slot.start) + ' \u2013 ' + fmtTime(slot.end) + '</span>';
+        html += '<span class="slot-time">' + fmtTime(slot.start) + ' \u2013 ' + fmtTime(slot.end) + fmtDurationSuffix(slot) + '</span>';
         html += '</div>';
       }
       html += '</div>';
@@ -668,7 +668,7 @@
       lines.push(days[d].dayLabel + ':');
       for (var s = 0; s < days[d].slots.length; s++) {
         var sl = days[d].slots[s];
-        lines.push('  - ' + fmtTime(sl.start) + ' - ' + fmtTime(sl.end));
+        lines.push('  - ' + fmtTime(sl.start) + ' - ' + fmtTime(sl.end) + fmtDurationSuffix(sl));
       }
       if (d < days.length - 1) lines.push('');
     }
@@ -682,11 +682,19 @@
       var parts = [];
       for (var s = 0; s < days[d].slots.length; s++) {
         var sl = days[d].slots[s];
-        parts.push(fmtTime(sl.start) + '-' + fmtTime(sl.end));
+        parts.push(fmtTime(sl.start) + '-' + fmtTime(sl.end) + fmtDurationSuffix(sl));
       }
       lines.push(days[d].dayLabel + ': ' + parts.join(', '));
     }
     return lines.join('\n');
+  }
+
+  function fmtDurationSuffix(slot) {
+    if (slot.maxMinutes === undefined || slot.maxMinutes === null) return '';
+    if (slot.maxMinutes >= 60 && slot.maxMinutes % 60 === 0) {
+      return ' (max ' + (slot.maxMinutes / 60) + 'h)';
+    }
+    return ' (max ' + slot.maxMinutes + ' min)';
   }
 
   function fmtTime(iso) {
