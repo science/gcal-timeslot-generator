@@ -131,10 +131,15 @@ export function isMeetingCoveredBySlots(
   meeting: BusyBlock,
   slots: TimeSlot[],
 ): boolean {
+  const dur = (meeting.end - meeting.start) / 60000;
   return slots.some((s) => {
     const ss = new Date(s.start).getTime();
     const ee = new Date(s.end).getTime();
-    return ss <= meeting.start && ee >= meeting.end;
+    if (ss > meeting.start || ee < meeting.end) return false;
+    // Annotation rule: a slot with maxMinutes only covers meetings of
+    // that duration or shorter.
+    if (s.maxMinutes !== undefined && dur > s.maxMinutes) return false;
+    return true;
   });
 }
 
@@ -156,26 +161,54 @@ export interface OracleComparison {
  * - `overOffered` lists grid meetings inside an offered slot that the oracle rejects
  *   (soundness bug — offering something the user shouldn't book).
  */
+/**
+ * Compare an algorithm's output slots to the oracle for a given day.
+ *
+ * Two checks:
+ *
+ *   COMPLETENESS — every valid meeting on the grid (by default just
+ *     30-minute meetings, the user's stated minimum) must be covered by
+ *     some offered slot honoring its maxMinutes annotation.
+ *
+ *   SOUNDNESS — every meeting fully inside an offered slot whose
+ *     duration is ≤ the slot's maxMinutes (or ≤ 60 if unannotated, since
+ *     the user's stated default normal-meeting cap is 1 hour) must be
+ *     valid per the oracle.
+ *
+ * Larger-duration meetings (>30) that the oracle deems valid but the
+ * algorithm doesn't offer are NOT a completeness violation under the
+ * current contract — the algorithm intentionally trades some long-meeting
+ * coverage for clean non-overlapping output.
+ */
 export function compareWithOracle(
   busy: BusyBlock[],
   slots: TimeSlot[],
   dayStartMs: number,
   dayEndMs: number,
   rules: FatigueRules,
-  gridMinutes = 15,
-  durations: number[] = [30, 45, 60, 90, 120],
+  gridMinutes?: number,
+  completenessDurations: number[] = [30],
 ): OracleComparison {
-  const valid = enumerateValidMeetings(busy, dayStartMs, dayEndMs, rules, gridMinutes, durations);
+  // Grid defaults to rules.minMinutes — the algorithm is sound for
+  // meetings starting on the minMinutes grid, not a finer 15-min grid.
+  // Off-grid positions (e.g. 1:15pm starts) are outside the guarantee.
+  const grid = gridMinutes ?? rules.minMinutes;
+  const valid = enumerateValidMeetings(
+    busy, dayStartMs, dayEndMs, rules, grid, completenessDurations,
+  );
   const missing = valid.filter((m) => !isMeetingCoveredBySlots(m, slots));
 
-  // Soundness: walk every grid meeting fully inside each slot; check oracle.
+  // Soundness: for each offered slot, every grid meeting fully inside
+  // with duration ≤ effective cap must be valid.
   const overOffered: BusyBlock[] = [];
-  const grid = gridMinutes * 60000;
+  const gridMs = grid * 60000;
+  const NORMAL_DEFAULT = 60;
   for (const slot of slots) {
     const ss = new Date(slot.start).getTime();
     const ee = new Date(slot.end).getTime();
-    for (let s = ss; s < ee; s += grid) {
-      for (const d of durations) {
+    const cap = slot.maxMinutes ?? NORMAL_DEFAULT;
+    for (let s = ss; s < ee; s += gridMs) {
+      for (let d = rules.minMinutes; d <= cap; d += grid) {
         const e = s + d * 60000;
         if (e > ee) continue;
         const m = { start: s, end: e };

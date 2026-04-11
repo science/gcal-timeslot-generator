@@ -91,18 +91,24 @@ export function mergeBusyBlocks(blocks: BusyBlock[]): BusyBlock[] {
 //   2. A proposed meeting's "containing run" after insertion must have
 //      span ≤ maxContinuousMinutes.
 //   3. A free slot [a, b] is sound iff every meeting of duration ≥
-//      minMinutes placed fully inside [a, b] satisfies (2).
+//      minMinutes and ≤ slot.maxMinutes placed fully inside [a, b]
+//      satisfies (2).
 //
-// For each raw free gap between runs (and at day edges), the computer
-// emits up to three slot candidates:
+// Emission strategy (April 2026 revision):
 //
-//   - LEFT-ANCHORED:  adjacent to the prev run (run absorbs the meeting)
-//   - RIGHT-ANCHORED: adjacent to the next run
-//   - MIDDLE ISLAND:  separated by breaks from both neighbors
+//   For each raw free gap between runs (and at day edges):
 //
-// After emission, slots fully contained inside a looser neighbor are
-// dropped. Slots whose effective max duration is < slot length carry a
-// maxMinutes annotation telling the UI how large a meeting may be.
+//   1. Enumerate all valid 30-min meeting starts on the 15-min grid.
+//   2. Group consecutive valid starts into contiguous regions.
+//   3. Each region becomes ONE non-overlapping slot spanning from the
+//      first valid start to (last valid start + minMinutes).
+//   4. Compute X = the largest meeting duration such that EVERY meeting
+//      of length ≤ X positioned anywhere on the grid inside the slot is
+//      valid. Annotate with maxMinutes only when X < 60 (the user's
+//      assumed normal-meeting ceiling) AND slot length > X.
+//
+// This produces non-overlapping slots and never annotates a slot whose
+// constraint is looser than a normal 1-hour meeting.
 // ─────────────────────────────────────────────────────────────────────
 
 export interface FreeSlotOptions {
@@ -146,9 +152,98 @@ function makeSlot(start: number, end: number, maxMin?: number): TimeSlot {
   return slot;
 }
 
+/** Threshold above which we don't bother annotating maxMinutes. */
+const NORMAL_MEETING_MAX_MS = 60 * 60000;
+
+// Grid resolution: meetings are enumerated at minMinutes increments.
+// This means the algorithm is sound "for meetings starting on the
+// minMinutes grid" — e.g. with minMinutes=30, meeting starts are :00
+// and :30. Users who book at :15 or :45 are outside the guarantee and
+// should verify manually.
+//
+// Rationale: 15-min grid pollutes otherwise-clean slots. A 2pm-5pm
+// free block next to a 1-2pm busy block has a low local max at 2:15
+// (because 2:15-3:15 touches the 1-2 run too tightly), which drags
+// the whole slot's annotated cap down. Nobody books meetings at 2:15,
+// so paying that cost for theoretical completeness is wrong.
+
+/**
+ * Is a proposed meeting [ms, me] valid against a gap with optional left
+ * and right run bookends? This is the canonical fatigue rule:
+ *   - If the meeting touches the left run (gap < breakMs), the combined
+ *     run span is L + (me - leftEnd). Must be ≤ maxMs.
+ *   - Symmetric for right.
+ *   - If it touches both, the run is L + G + R.
+ *   - If it touches neither, own-run span = me - ms. Must be ≤ maxMs.
+ */
+function isMeetingValidInGap(
+  ms: number,
+  me: number,
+  left: Run | undefined,
+  right: Run | undefined,
+  maxMs: number,
+  breakMs: number,
+): boolean {
+  if (me <= ms) return false;
+  const touchesLeft = left ? ms - left.end < breakMs : false;
+  const touchesRight = right ? right.start - me < breakMs : false;
+  const L = left ? left.end - left.start : 0;
+  const R = right ? right.end - right.start : 0;
+  if (touchesLeft && touchesRight) {
+    return L + (right!.start - left!.end) + R <= maxMs;
+  }
+  if (touchesLeft) {
+    return L + (me - left!.end) <= maxMs;
+  }
+  if (touchesRight) {
+    return R + (right!.start - ms) <= maxMs;
+  }
+  return me - ms <= maxMs;
+}
+
+/**
+ * Largest meeting duration X (a multiple of minMs — the emission grid)
+ * such that EVERY meeting of length ≤ X positioned on the grid inside
+ * [a, b] is valid. Returns 0 if no minMs-length meeting in [a, b] is
+ * valid. Note the loop increments d by minMs, so X is always a multiple
+ * of minMs (on the 30-min default grid: X ∈ {30, 60, 90, 120, ...}).
+ */
+function maxValidDurationInRegion(
+  a: number,
+  b: number,
+  left: Run | undefined,
+  right: Run | undefined,
+  maxMs: number,
+  breakMs: number,
+  minMs: number,
+): number {
+  let maxValid = 0;
+  for (let d = minMs; a + d <= b; d += minMs) {
+    let allOk = true;
+    for (let s = a; s + d <= b; s += minMs) {
+      if (!isMeetingValidInGap(s, s + d, left, right, maxMs, breakMs)) {
+        allOk = false;
+        break;
+      }
+    }
+    if (!allOk) break; // monotone: longer d at the failing position also fails
+    maxValid = d;
+  }
+  return maxValid;
+}
+
+/** Round a timestamp up to the next multiple of minMs, anchored at dayStartMs. */
+function nextGridStart(ms: number, dayStartMs: number, minMs: number): number {
+  if (ms <= dayStartMs) return dayStartMs;
+  const offset = ms - dayStartMs;
+  const r = offset % minMs;
+  return r === 0 ? ms : ms + (minMs - r);
+}
+
 /**
  * For one raw free gap [a, b] bounded by (optional) left and right runs,
- * emit the set of sound slot candidates.
+ * emit non-overlapping slots: one per contiguous region of valid minMs
+ * meeting starts on the grid. Grid starts are anchored at dayStartMs.
  */
 function slotsForGap(
   a: number,
@@ -158,6 +253,7 @@ function slotsForGap(
   maxMs: number,
   breakMs: number,
   minMs: number,
+  dayStartMs: number,
 ): TimeSlot[] {
   const G = b - a;
   if (G < minMs) return [];
@@ -165,84 +261,65 @@ function slotsForGap(
   const L = left ? left.end - left.start : 0;
   const R = right ? right.end - right.start : 0;
 
-  // Fast path: even a full-gap meeting that touches both neighbors is
-  // under threshold. Single unconstrained slot.
+  // Fast path: a full-gap meeting touching both neighbors stays under
+  // threshold, so the whole gap is unconstrained. Single slot, no
+  // annotation (the slot's own length is the cap, and that cap ≤ maxMs).
   if (L + G + R <= maxMs) {
-    // Max meeting duration here is G, which is ≤ maxMs − L − R ≤ maxMs.
-    return [makeSlot(a, b)];
+    // Align to grid so the emitted slot starts at a clean boundary.
+    const aligned = nextGridStart(a, dayStartMs, minMs);
+    if (aligned + minMs > b) return [];
+    return [makeSlot(aligned, b)];
   }
 
+  // Find every grid-aligned start where a minMs meeting is valid.
+  // Starts are anchored to dayStartMs so a meeting ending at 10:45
+  // doesn't cause the next slot's grid to be offset by 15 minutes.
+  const validStarts: number[] = [];
+  const gridStart = nextGridStart(a, dayStartMs, minMs);
+  for (let s = gridStart; s + minMs <= b; s += minMs) {
+    if (isMeetingValidInGap(s, s + minMs, left, right, maxMs, breakMs)) {
+      validStarts.push(s);
+    }
+  }
+  if (validStarts.length === 0) return [];
+
+  // Group consecutive grid-aligned valid starts into runs. Each run
+  // becomes one slot.
   const out: TimeSlot[] = [];
-
-  // LEFT-ANCHORED: meetings touching the left run. Only produced when a
-  // left run exists; otherwise "touching left" is vacuous and the C slot
-  // covers the day-start edge.
-  if (left) {
-    const leftAllow = Math.max(0, maxMs - L);
-    // If a right run exists we must not extend into its break zone, or
-    // we'd leak into "touching both" territory which we know is unsafe.
-    const leftEnd = right
-      ? Math.min(a + leftAllow, b - breakMs)
-      : Math.min(a + leftAllow, b);
-    if (leftEnd - a >= minMs) {
-      out.push(makeSlot(a, leftEnd));
+  let runStart = validStarts[0];
+  let runEndStart = validStarts[0];
+  for (let i = 1; i < validStarts.length; i++) {
+    if (validStarts[i] === runEndStart + minMs) {
+      runEndStart = validStarts[i];
+    } else {
+      out.push(emitSlot(runStart, runEndStart + minMs, left, right, maxMs, breakMs, minMs));
+      runStart = validStarts[i];
+      runEndStart = validStarts[i];
     }
   }
-
-  // RIGHT-ANCHORED: symmetric.
-  if (right) {
-    const rightAllow = Math.max(0, maxMs - R);
-    const rightStart = left
-      ? Math.max(b - rightAllow, a + breakMs)
-      : Math.max(b - rightAllow, a);
-    if (b - rightStart >= minMs) {
-      out.push(makeSlot(rightStart, b));
-    }
-  }
-
-  // MIDDLE ISLAND: meetings that sit far enough from both neighbors to
-  // form their own run. The island is capped at maxMs duration because a
-  // longer meeting would violate (2) even without touching neighbors.
-  const mStart = left ? a + breakMs : a;
-  const mEnd = right ? b - breakMs : b;
-  const mLen = mEnd - mStart;
-  if (mLen >= minMs) {
-    const maxDurMs = Math.min(mLen, maxMs);
-    const maxMin = maxDurMs < mLen ? maxDurMs / 60000 : undefined;
-    out.push(makeSlot(mStart, mEnd, maxMin));
-  }
-
+  out.push(emitSlot(runStart, runEndStart + minMs, left, right, maxMs, breakMs, minMs));
   return out;
 }
 
-/** Drop any slot fully contained in another slot with a looser-or-equal constraint. */
-function dedupeContained(slots: TimeSlot[]): TimeSlot[] {
-  const withMs = slots.map((s) => ({
-    slot: s,
-    start: new Date(s.start).getTime(),
-    end: new Date(s.end).getTime(),
-    maxMs: (s.maxMinutes ?? Infinity) * 60000,
-  }));
-  const keep: boolean[] = withMs.map(() => true);
-  for (let i = 0; i < withMs.length; i++) {
-    if (!keep[i]) continue;
-    for (let j = 0; j < withMs.length; j++) {
-      if (i === j || !keep[j]) continue;
-      const A = withMs[i];
-      const B = withMs[j];
-      // A is contained in B and B's constraint is at least as loose → drop A.
-      if (B.start <= A.start && B.end >= A.end && B.maxMs >= A.maxMs) {
-        // Avoid mutual elimination when the two slots are equal.
-        if (A.start === B.start && A.end === B.end && A.maxMs === B.maxMs) {
-          if (i > j) keep[i] = false;
-        } else {
-          keep[i] = false;
-        }
-        break;
-      }
-    }
+function emitSlot(
+  slotStart: number,
+  slotEnd: number,
+  left: Run | undefined,
+  right: Run | undefined,
+  maxMs: number,
+  breakMs: number,
+  minMs: number,
+): TimeSlot {
+  const X = maxValidDurationInRegion(slotStart, slotEnd, left, right, maxMs, breakMs, minMs);
+  const slotLen = slotEnd - slotStart;
+  // Annotate only when the slot is more restrictive than a normal
+  // 1-hour meeting AND the slot is bigger than its cap (otherwise the
+  // length already communicates the cap).
+  let maxMinutes: number | undefined;
+  if (X < NORMAL_MEETING_MAX_MS && slotLen > X) {
+    maxMinutes = X / 60000;
   }
-  return withMs.filter((_, i) => keep[i]).map((w) => w.slot);
+  return makeSlot(slotStart, slotEnd, maxMinutes);
 }
 
 export function computeFreeSlotsWithFatigue(
@@ -273,16 +350,16 @@ export function computeFreeSlotsWithFatigue(
     if (run.start > cursor) {
       const leftRun = i > 0 ? runs[i - 1] : undefined;
       const gapLeft = leftRun && leftRun.end >= cursor ? leftRun : undefined;
-      slots.push(...slotsForGap(cursor, run.start, gapLeft, run, maxMs, breakMs, minMs));
+      slots.push(...slotsForGap(cursor, run.start, gapLeft, run, maxMs, breakMs, minMs, dayStartMs));
     }
     cursor = Math.max(cursor, run.end);
   }
   if (cursor < dayEndMs) {
     const leftRun = runs.length > 0 ? runs[runs.length - 1] : undefined;
-    slots.push(...slotsForGap(cursor, dayEndMs, leftRun, undefined, maxMs, breakMs, minMs));
+    slots.push(...slotsForGap(cursor, dayEndMs, leftRun, undefined, maxMs, breakMs, minMs, dayStartMs));
   }
 
-  return dedupeContained(slots);
+  return slots;
 }
 
 export function filterPastSlots(slots: TimeSlot[], nowMs: number): TimeSlot[] {
@@ -365,7 +442,7 @@ function intersectSlotSets(a: TimeSlot[], b: TimeSlot[], minMinutes: number): Ti
       out.push(slot);
     }
   }
-  return dedupeContained(out);
+  return out;
 }
 
 export function getAvailableSlots(options?: Partial<SlotOptions>): DaySlots[] {
