@@ -1,6 +1,13 @@
 export interface TimeSlot {
   start: string; // ISO 8601
   end: string;   // ISO 8601
+  /**
+   * When set, indicates the user may only book a meeting of up to this many
+   * minutes inside the slot (the slot is bounded by fatigue rules, not the
+   * slot length). When unset, any meeting that fits inside the slot is
+   * valid.
+   */
+  maxMinutes?: number;
 }
 
 export interface DaySlots {
