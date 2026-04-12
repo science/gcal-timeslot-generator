@@ -460,11 +460,35 @@ function getAvailableSlots(options) {
     const calendars = resolveCalendars(opts.calendarIds);
     const businessDays = getNextBusinessDays(opts.numDays, opts.includeToday, opts.endHour);
     const result = [];
+    if (businessDays.length === 0)
+        return result;
     const fatigueOpts = {
         maxContinuousMinutes: opts.maxContinuousMinutes,
         minBreakMinutes: opts.minBreakMinutes,
         minMinutes: opts.minMinutes,
     };
+    // Fetch all events once per calendar across the full date range,
+    // pre-process (filter declined/transparent, extract timestamps) so
+    // GAS API properties are read exactly once per event, not per day.
+    const rangeStart = new Date(businessDays[0]);
+    rangeStart.setHours(opts.startHour, 0, 0, 0);
+    const rangeEnd = new Date(businessDays[businessDays.length - 1]);
+    rangeEnd.setHours(opts.endHour, 0, 0, 0);
+    const eventsByCalendar = calendars.map((calendar) => {
+        const events = calendar.getEvents(rangeStart, rangeEnd);
+        const blocks = [];
+        for (const event of events) {
+            if (isDeclined(event))
+                continue;
+            if (isTransparentAllDay(event))
+                continue;
+            blocks.push({
+                start: event.getStartTime().getTime(),
+                end: event.getEndTime().getTime(),
+            });
+        }
+        return blocks;
+    });
     for (const day of businessDays) {
         const dayStart = new Date(day);
         dayStart.setHours(opts.startHour, 0, 0, 0);
@@ -472,27 +496,20 @@ function getAvailableSlots(options) {
         dayEnd.setHours(opts.endHour, 0, 0, 0);
         const dayStartMs = dayStart.getTime();
         const dayEndMs = dayEnd.getTime();
-        // Collect raw busy blocks per calendar.
-        const blocksByCalendar = [];
-        for (const calendar of calendars) {
-            const calBlocks = [];
-            const events = calendar.getEvents(dayStart, dayEnd);
-            for (const event of events) {
-                if (isDeclined(event))
+        const blocksByCalendar = eventsByCalendar.map((calEvents) => {
+            const dayBlocks = [];
+            for (const ev of calEvents) {
+                if (ev.end <= dayStartMs || ev.start >= dayEndMs)
                     continue;
-                if (isTransparentAllDay(event))
-                    continue;
-                calBlocks.push({
-                    start: Math.max(event.getStartTime().getTime(), dayStartMs),
-                    end: Math.min(event.getEndTime().getTime(), dayEndMs),
+                dayBlocks.push({
+                    start: Math.max(ev.start, dayStartMs),
+                    end: Math.min(ev.end, dayEndMs),
                 });
             }
-            blocksByCalendar.push(calBlocks);
-        }
+            return dayBlocks;
+        });
         let slots;
         if (opts.calendarMode === 'group' && blocksByCalendar.length > 1) {
-            // Each calendar is a distinct person. Compute per-person free slots
-            // under that person's fatigue rules, then intersect the sets.
             const perPerson = blocksByCalendar.map((b) => computeFreeSlotsWithFatigue(b, dayStartMs, dayEndMs, fatigueOpts));
             slots = perPerson[0];
             for (let i = 1; i < perPerson.length; i++) {

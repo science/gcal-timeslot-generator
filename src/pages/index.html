@@ -220,10 +220,11 @@
       padding: 14px;
       font-size: 13px;
       font-family: 'Roboto Mono', monospace;
-      white-space: pre-wrap;
       color: var(--text-secondary);
-      max-height: 300px;
-      overflow-y: auto;
+      height: 300px;
+      width: 100%;
+      box-sizing: border-box;
+      resize: vertical;
     }
 
     .preview-label {
@@ -407,7 +408,7 @@
 </details>
 
 <div class="preview-label">Preview</div>
-<div id="preview" class="preview">Loading...</div>
+<textarea id="preview" class="preview" spellcheck="false">Loading...</textarea>
 
 <div class="preview-label">Select Time Slots</div>
 <div id="content">
@@ -646,7 +647,7 @@
     var selected = getSelectedSlots();
     var style = document.getElementById('formatStyle').value;
     var text = formatLocal(selected, style);
-    document.getElementById('preview').textContent = text;
+    document.getElementById('preview').value = text;
     document.getElementById('copyBtn').disabled = selected.length === 0;
   }
 
@@ -717,7 +718,7 @@
   }
 
   function copyToClipboard() {
-    var text = document.getElementById('preview').textContent;
+    var text = document.getElementById('preview').value;
     var btn = document.getElementById('copyBtn');
 
     if (navigator.clipboard && navigator.clipboard.writeText) {
