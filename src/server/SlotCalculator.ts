@@ -380,6 +380,37 @@ function emitForRegion(
 }
 
 /**
+ * Post-pass: annotate minMs-length slots that touch a sibling slot at
+ * either boundary. Three back-to-back 30-min slots visually merge into
+ * one 90-min run, and a reader assumes they can book 60 min across
+ * them. An explicit "(max 30 min)" label debunks the visual merge.
+ * Standalone 30-min slots (no touching sibling) keep the unannotated
+ * form — their length alone is unambiguous. Two touching slots within
+ * a day always share a free region (a busy block between them would
+ * create a gap), so adjacency is a reliable proxy for "this was a
+ * fatigue-driven split, not a full-width slot."
+ */
+function annotateTouchingMinSlots(slots: TimeSlot[], minMs: number): TimeSlot[] {
+  if (slots.length < 2) return slots;
+  const sorted = slots
+    .slice()
+    .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
+  const minMinutes = minMs / 60000;
+  return sorted.map((slot, i) => {
+    if (slot.maxMinutes !== undefined) return slot;
+    const startMs = new Date(slot.start).getTime();
+    const endMs = new Date(slot.end).getTime();
+    if (endMs - startMs !== minMs) return slot;
+    const touchesPrev = i > 0 && new Date(sorted[i - 1].end).getTime() === startMs;
+    const touchesNext = i < sorted.length - 1 && new Date(sorted[i + 1].start).getTime() === endMs;
+    if (touchesPrev || touchesNext) {
+      return { ...slot, maxMinutes: minMinutes };
+    }
+    return slot;
+  });
+}
+
+/**
  * Wrap a slot range with an optional maxMinutes annotation: only
  * annotate when the effective cap is under the normal-meeting ceiling
  * AND the slot has more room than that cap (otherwise the length
@@ -431,7 +462,7 @@ export function computeFreeSlotsWithFatigue(
     slots.push(...slotsForGap(cursor, dayEndMs, leftRun, undefined, maxMs, breakMs, minMs, dayStartMs));
   }
 
-  return slots;
+  return annotateTouchingMinSlots(slots, minMs);
 }
 
 export function filterPastSlots(slots: TimeSlot[], nowMs: number): TimeSlot[] {

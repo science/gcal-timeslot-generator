@@ -11,11 +11,19 @@
 //        - max valid duration ≥ 60 min  → no annotation
 //        - max valid duration < 60 min and slot length > X → "(max X min)"
 //        - slot length == X (e.g. a 30-min slot supporting a 30-min meeting)
-//          → no annotation; the slot length already communicates the cap
+//          → no annotation UNLESS the slot touches a sibling (rule 4).
 //
 //   3. The slot's [start, end] must be SOUND for the annotation: every
 //      meeting of duration ≤ X (or ≤ 60 if no annotation) placed fully
 //      inside the slot must be valid.
+//
+//   4. Adjacency exception: a minMinutes-length slot whose cap equals
+//      its length gets an explicit "(max 30 min)" label if it touches
+//      a sibling slot at either boundary. Without the label, three
+//      back-to-back 30-min slots visually merge into one 90-min run
+//      and a reader wrongly assumes a 60-min meeting can span them.
+//      Standalone minMinutes slots stay unannotated because they can't
+//      be confused for part of a longer bookable window.
 
 import { computeFreeSlotsWithFatigue } from "../../src/server/SlotCalculator";
 import type { BusyBlock, TimeSlot } from "../../src/shared/types";
@@ -134,9 +142,9 @@ describe("fallback — split into individual slots when no core reaches 60", () 
       (s) => new Date(s.start).getTime() === t(12, 30) && new Date(s.end).getTime() === t(13),
     );
     expect(a).toBeDefined();
-    expect(a!.maxMinutes).toBeUndefined();
+    expect(a!.maxMinutes).toBe(30);
     expect(b).toBeDefined();
-    expect(b!.maxMinutes).toBeUndefined();
+    expect(b!.maxMinutes).toBe(30);
     // Ensure the "one big annotated slot" version is NOT present.
     const big = slots.find(
       (s) => new Date(s.start).getTime() === t(12) && new Date(s.end).getTime() === t(13),
@@ -196,7 +204,7 @@ describe("boundary-trim splitting — preserve big core slots", () => {
       (s) => new Date(s.start).getTime() === t(11) && new Date(s.end).getTime() === t(12, 30),
     );
     expect(first).toBeDefined();
-    expect(first!.maxMinutes).toBeUndefined();
+    expect(first!.maxMinutes).toBe(30);
     expect(core).toBeDefined();
     expect(core!.maxMinutes).toBeUndefined();
   });
@@ -220,7 +228,7 @@ describe("boundary-trim splitting — preserve big core slots", () => {
     expect(core).toBeDefined();
     expect(core!.maxMinutes).toBeUndefined();
     expect(tail).toBeDefined();
-    expect(tail!.maxMinutes).toBeUndefined();
+    expect(tail!.maxMinutes).toBe(30);
   });
 
   it("1.5h + 2h gap + 1.5h: three slots — tight ends, unannotated middle", () => {
@@ -242,11 +250,11 @@ describe("boundary-trim splitting — preserve big core slots", () => {
       (s) => new Date(s.start).getTime() === t(12) && new Date(s.end).getTime() === t(12, 30),
     );
     expect(first).toBeDefined();
-    expect(first!.maxMinutes).toBeUndefined();
+    expect(first!.maxMinutes).toBe(30);
     expect(middle).toBeDefined();
     expect(middle!.maxMinutes).toBeUndefined();
     expect(last).toBeDefined();
-    expect(last!.maxMinutes).toBeUndefined();
+    expect(last!.maxMinutes).toBe(30);
   });
 });
 
@@ -279,4 +287,78 @@ describe("non-overlap is universal across permutations", () => {
       }
     });
   }
+});
+
+describe("cojoined 30-min disambiguation (Wed Apr 22 ground truth)", () => {
+  // Real calendar: 9-9:45, 10-10:30, 12-1, 1-1:30. Runs [9, 10:30] and
+  // [12, 13:30] both span 90 min, so every start in the 10:30-12 gap
+  // caps at 30 min. Without labels, the output "10:30-11, 11-11:30,
+  // 11:30-12" visually merges into one 90-min block and a reader
+  // assumes they can book 60 min across it. The adjacency post-pass
+  // annotates each touching 30-min slot so the cap is explicit.
+  const busy: BusyBlock[] = [
+    { start: t(9), end: t(9, 45) },
+    { start: t(10), end: t(10, 30) },
+    { start: t(12), end: t(13) },
+    { start: t(13), end: t(13, 30) },
+  ];
+
+  it("annotates each of the three back-to-back 30-min slots as (max 30 min)", () => {
+    const slots = run(busy);
+    const windows: Array<[number, number]> = [
+      [t(10, 30), t(11)],
+      [t(11), t(11, 30)],
+      [t(11, 30), t(12)],
+    ];
+    for (const [a, b] of windows) {
+      const slot = slots.find(
+        (s) => new Date(s.start).getTime() === a && new Date(s.end).getTime() === b,
+      );
+      expect(slot).toBeDefined();
+      expect(slot!.maxMinutes).toBe(30);
+    }
+  });
+
+  it("annotates the 1:30-2 tail that touches the 2-5 long block", () => {
+    const slots = run(busy);
+    const tail = slots.find(
+      (s) => new Date(s.start).getTime() === t(13, 30) && new Date(s.end).getTime() === t(14),
+    );
+    expect(tail).toBeDefined();
+    expect(tail!.maxMinutes).toBe(30);
+  });
+
+  it("leaves the long 2-5 trailing slot unannotated (length already communicates freedom)", () => {
+    const slots = run(busy);
+    const long = slots.find(
+      (s) => new Date(s.start).getTime() === t(14) && new Date(s.end).getTime() === t(17),
+    );
+    expect(long).toBeDefined();
+    expect(long!.maxMinutes).toBeUndefined();
+  });
+});
+
+describe("standalone 30-min slot stays unannotated (adjacency rule does not misfire)", () => {
+  it("a single 30-min slot with no touching sibling keeps no annotation", () => {
+    // busy: [9-11, 11:30-13]. The only free region before lunch is the
+    // 30-min window [11, 11:30], and no meeting inside is valid (joining
+    // both bookends makes a 240-min run), so no slot emits from it. The
+    // afternoon has a clean [13, 17] gap. There is ONE slot at 11:30-12?
+    // Actually no — [11, 11:30] has no valid starts, so no 30-min slot
+    // emits there. Use a different setup: [9-11, 12-13]. Region [11, 12]
+    // only has a valid 11:30 start, region [13, 17] emits a long slot
+    // starting at 13. The 11:30-12 slot is 30 min, and the next slot
+    // (13-17) does NOT touch it (12 ≠ 13), so the adjacency rule leaves
+    // it unannotated.
+    const busy: BusyBlock[] = [
+      { start: t(9), end: t(11) },
+      { start: t(12), end: t(13) },
+    ];
+    const slots = run(busy);
+    const standalone = slots.find(
+      (s) => new Date(s.start).getTime() === t(11, 30) && new Date(s.end).getTime() === t(12),
+    );
+    expect(standalone).toBeDefined();
+    expect(standalone!.maxMinutes).toBeUndefined();
+  });
 });
