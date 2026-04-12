@@ -40,10 +40,10 @@ Google Apps Script web app written in TypeScript, bundled with Rollup.
 ### Source Layout
 
 - **`src/server/Code.ts`** — GAS entry points: `doGet()`, `getSlots()`, `getCalendars()`. Only file that touches GAS runtime APIs.
-- **`src/server/SlotCalculator.ts`** — Pure functions: `computeFreeSlots`, `mergeBusyBlocks`, `applyFatigueBreaks`, `filterPastSlots`, `getNextBusinessDays`. The one exception is `getAvailableSlots()` which calls Calendar API.
-- **`src/server/Formatter.ts`** — Pure formatting functions: `formatTime`, `formatSlots` (bullets/compact styles).
-- **`src/shared/types.ts`** — Shared interfaces: `TimeSlot`, `DaySlots`, `SlotOptions`, `BusyBlock`, `CalendarInfo`.
-- **`src/pages/index.html`** — Complete UI (HTML + CSS + inline JS). Calls server via `google.script.run.*`.
+- **`src/server/SlotCalculator.ts`** — Pure functions: `computeFreeSlotsWithFatigue` (fatigue-aware slot emission), `mergeBusyBlocks`, `filterPastSlots`, `roundSlotStarts`, `getNextBusinessDays`. Non-pure: `getAvailableSlots()` and `fetchCalendarEvents()` call the Advanced Calendar Service (`Calendar.Events.list`).
+- **`src/server/Formatter.ts`** — Pure formatting functions: `formatTime`, `formatSlots` (bullets/compact styles), `durationSuffix` (renders "(max 30 min)" annotations).
+- **`src/shared/types.ts`** — Shared interfaces: `TimeSlot` (with optional `maxMinutes`), `DaySlots`, `SlotOptions`, `BusyBlock`, `CalendarInfo`.
+- **`src/pages/index.html`** — Complete UI (HTML + CSS + inline JS). Preview is an editable `<textarea>`. Calls server via `google.script.run.*`.
 
 ### Test Setup
 
@@ -72,7 +72,7 @@ Internals:
 - `scripts/deploy.js` auto-discovers the non-HEAD deployment ID via clasp output
 - Clasp syntax: `clasp deploy -i <id> -V <version>` (not `--deploymentId`)
 - `release/` folder has pre-built files for non-developer distribution
-- Build injects `__GIT_HASH__` and `__GIT_DATE__` placeholders in `index.html` with the current git commit (version indicator visible in the UI footer, links to GitHub commit)
+- Build injects `__GIT_HASH__` and `__GIT_DATE__` placeholders in `index.html` with the current git commit (version indicator visible in the UI footer, links to GitHub commit). The `release/` copy uses the stable package version (`v0.3.0`) instead of git hash/date to keep the build idempotent — otherwise every commit or new day makes `release/` dirty and blocks deploy.
 
 ## Testing & TDD
 
@@ -82,15 +82,19 @@ Internals:
 
 All pure functions in `SlotCalculator.ts` and `Formatter.ts` are fully testable with Jest — no GAS runtime needed. This is by design: business logic is deliberately separated from GAS API calls. When adding new logic, keep it pure and export it so tests can reach it.
 
-Current test files:
-- `tests/server/SlotCalculator.test.ts` — covers `mergeBusyBlocks`, `computeFreeSlots`, `filterPastSlots`, `applyFatigueBreaks`, `getNextBusinessDays`, `formatDayLabel`
+Current test files (131 tests total):
+- `tests/server/SlotCalculator.test.ts` — covers `mergeBusyBlocks`, `computeFreeSlotsWithFatigue`, `filterPastSlots`, `getNextBusinessDays`, `formatDayLabel`
 - `tests/server/Formatter.test.ts` — covers `formatTime`, `formatSlots` (both styles)
+- `tests/server/SlotEmissionStrategy.test.ts` — non-overlapping emission, boundary-trim splitting, adjacent-slot annotation, fallback individual splits
+- `tests/server/AvailabilityOracleComparison.test.ts` — compares algorithm output against the reference oracle across 23 named fixtures + 381 synthetic permutations (2-block and 3-block arrangements over varying durations and gaps)
+- `tests/server/availabilityOracle.ts` — reference oracle implementing availability rules from first principles (`isValidMeeting`, `compareWithOracle`). The oracle is the ground truth — if it and the algorithm disagree, the algorithm is wrong.
+- `tests/server/availabilityFixtures.ts` — 10 calendar fixtures (anonymized from real Apr 2026 data) + 13 synthetic rule-isolation fixtures, each with hand-derived expected valid meeting starts
 
 ### What's not testable (GAS boundaries)
 
 Some things can't be unit tested locally because they depend on the GAS runtime:
 - **`google.script.run.*`** calls from the HTML UI — no local browser environment
-- **Calendar API calls** in `getAvailableSlots()` and `getCalendars()` — would require mocking the entire `CalendarApp` global
+- **Calendar API calls** in `getAvailableSlots()` / `fetchCalendarEvents()` and `getCalendars()` — `fetchCalendarEvents` uses the Advanced Calendar Service (`Calendar.Events.list`); `getCalendars` still uses `CalendarApp` for listing calendars
 - **`doGet()` / `HtmlService`** — GAS-specific serving layer
 - **UI behavior** in `index.html` — inline JS with no test harness
 

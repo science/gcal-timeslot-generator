@@ -8,7 +8,9 @@ A Google Apps Script web app that reads your Google Calendar and generates copya
 - Computes free time slots within configurable working hours
 - **Multi-calendar support** -- select which calendars contribute to busy-time calculation (personal + work, or switch between different people's calendars)
 - **Meeting fatigue breaks** -- automatically inserts buffer time after long meeting blocks, with smart gap classification (micro-gaps merge, short gaps may close, real breaks always preserved)
+- **Non-overlapping slots** -- each free gap produces clean, non-overlapping time slots. Short constrained slots (e.g. 30 min between long blocks) are labeled "(max 30 min)" when adjacent to other slots so readers don't assume they can book longer
 - **Slot rounding** -- round slot start times to clean increments (5, 10, 15, or 30 min) so you never propose a meeting at 2:55pm
+- **Editable preview** -- the preview area is an editable text box; clean up or remove slots before copying
 - **Timezone display** -- format times in Pacific, Mountain, Central, or Eastern
 - **Include today** -- optionally show remaining availability for the current day
 - Check/uncheck individual slots or entire days before copying
@@ -70,7 +72,13 @@ The pre-built files are in the [`release/`](release/) folder of this repository.
 ```json
 {
   "timeZone": "America/Los_Angeles",
-  "dependencies": {},
+  "dependencies": {
+    "enabledAdvancedServices": [{
+      "userSymbol": "Calendar",
+      "serviceId": "calendar",
+      "version": "v3"
+    }]
+  },
   "exceptionLogging": "STACKDRIVER",
   "runtimeVersion": "V8",
   "webapp": {
@@ -80,7 +88,13 @@ The pre-built files are in the [`release/`](release/) folder of this repository.
 }
 ```
 
-### 3. Deploy as a web app
+### 3. Enable the Calendar API
+
+1. In the left sidebar, click the **+** next to **Services**
+2. Find **Google Calendar API** in the list
+3. Click **Add**
+
+### 4. Deploy as a web app
 
 1. Click **Deploy** > **New deployment**
 2. Click the **gear icon** next to "Select type" and choose **Web app**
@@ -95,7 +109,7 @@ The pre-built files are in the [`release/`](release/) folder of this repository.
 8. Click **Allow** to grant calendar read access
 9. Copy the **Web app URL** shown -- bookmark this link
 
-### 4. Use it
+### 5. Use it
 
 Open the Web app URL. The app reads your Google Calendar, computes your free time slots, and lets you copy formatted availability text to your clipboard.
 
@@ -136,7 +150,11 @@ When a new version is released, update your Apps Script project to get bug fixes
 
 ### What's New in v0.3.0
 
-- **Bug fix**: Fatigue breaks no longer incorrectly block time after real breaks between meetings. Previously, a gap between meetings (e.g., free from 2:55pm) could be pushed to 3:25pm because the system treated the break as continuous meeting time.
+- **Complete fatigue algorithm rewrite**: Slot computation rebuilt from scratch against a reference oracle that validates correctness from first principles. All 381 permutations of block/gap arrangements pass both soundness (no invalid meetings offered) and completeness (no valid meetings missed) checks.
+- **Non-overlapping slots**: Free gaps now produce clean, non-overlapping time slots instead of confusing overlapping left/right/middle anchored ranges.
+- **Adjacent-slot disambiguation**: Back-to-back 30-min slots are labeled "(max 30 min)" so readers don't visually merge them into a bookable 60+ minute window.
+- **~5x faster loading**: Switched from CalendarApp (which lazy-loads each event property as a separate API round-trip) to the Advanced Calendar Service, which returns all event data in a single bulk JSON response per calendar.
+- **Editable preview**: The preview area is now a textarea you can edit before copying — remove unwanted slots or tweak wording in-place.
 - **Slot rounding**: Slot start times are now rounded up to clean increments (default 15 min), so you won't see awkward times like 2:55pm — it becomes 3:00pm instead. Configurable to 5, 10, 15, or 30 minutes in Advanced settings.
 - **Clearer labels**: "Break after" is now "Required break" and "Min gap for break" is now "Ignore gaps under" to better describe what they do.
 
@@ -149,10 +167,12 @@ When a new version is released, update your Apps Script project to get bug fixes
 5. Click on `index.html` in the file list
 6. Select all (`Ctrl+A`) and delete
 7. Open [`release/index.html`](release/index.html) in this repository, copy the entire contents, and paste
-8. Click **Deploy** > **Manage deployments**
-9. Click the **pencil icon** on your existing deployment
-10. Change **Version** to "New version"
-11. Click **Deploy**
+8. Update `appsscript.json` the same way (copy from [`release/appsscript.json`](release/appsscript.json))
+9. If you haven't already, enable the **Google Calendar API** under Services (click **+** next to Services, find Google Calendar API, click Add)
+10. Click **Deploy** > **Manage deployments**
+11. Click the **pencil icon** on your existing deployment
+12. Change **Version** to "New version"
+13. Click **Deploy**
 
 Your bookmarked URL stays the same — just reload the page to see the updated app.
 
@@ -208,7 +228,7 @@ This compiles TypeScript, bundles with Rollup, pushes to Apps Script, creates a 
 
 | Command | Description |
 |---------|-------------|
-| `npm test` | Run Jest unit tests (79 tests) |
+| `npm test` | Run Jest unit tests (131 tests) |
 | `npm run build` | Compile and bundle to `dist/` and `release/` |
 | `npm run push` | Build and push to Apps Script |
 | `npm run deploy` | Build, push, create version, update deployment |
@@ -240,7 +260,7 @@ dist/                   Build output (pushed to Apps Script)
 
 The app runs as a Google Apps Script web app. `Code.ts` is the entry point. The build process (Rollup) bundles all server TypeScript into a single `Code.gs` file and strips ES module syntax (Apps Script runs everything in a shared global scope). The `index.html` is served by `HtmlService`.
 
-Pure computation functions (`mergeBusyBlocks`, `computeFreeSlots`, `applyFatigueBreaks`, `filterPastSlots`, `roundSlotStarts`) are exported and unit-tested with Jest. The `getAvailableSlots` wrapper calls the Google Calendar API and is not unit-tested (requires the GAS runtime).
+Pure computation functions (`mergeBusyBlocks`, `computeFreeSlotsWithFatigue`, `filterPastSlots`, `roundSlotStarts`) are exported and unit-tested with Jest — 131 tests including a 381-permutation sweep validated against a reference oracle. The `getAvailableSlots` wrapper calls the Google Calendar API via the Advanced Calendar Service and is not unit-tested (requires the GAS runtime).
 
 ### Running Tests
 
