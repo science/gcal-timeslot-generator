@@ -44,7 +44,7 @@ function copyHtml() {
           /\<a href="https:\/\/github\.com\/[^"]*\/commit\/__GIT_HASH__"([^>]*)\>__GIT_HASH__\<\/a\>/g,
           `<a href="https://github.com/science/gcal-timeslot-generator/releases" $1>v${pkgVersion}</a>`,
         )
-        .replace("__GIT_DATE__", gitDate);
+        .replace(" · __GIT_DATE__", "");
       const code = readFileSync("dist/Code.gs", "utf-8");
       const manifest = readFileSync("appsscript.json", "utf-8");
       writeFileSync(join("release", "Code.gs"), code);
