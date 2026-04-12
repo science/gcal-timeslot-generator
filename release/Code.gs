@@ -47,17 +47,38 @@ function formatDateKey(date) {
     const d = String(date.getDate()).padStart(2, "0");
     return `${y}-${m}-${d}`;
 }
-function isDeclined(event) {
-    const status = event.getMyStatus();
-    return status === CalendarApp.GuestStatus.NO;
-}
-function isTransparentAllDay(event) {
-    if (!event.isAllDayEvent())
-        return false;
-    const title = event.getTitle().toLowerCase();
-    if (title.includes("holiday") && event.getGuestList().length === 0)
-        return true;
-    return false;
+/** Fetch all events for a calendar in one Advanced Calendar Service call. */
+function fetchCalendarEvents(calendarId, rangeStart, rangeEnd) {
+    var _a, _b, _c;
+    const blocks = [];
+    let pageToken;
+    do {
+        const response = Calendar.Events.list(calendarId, {
+            timeMin: rangeStart.toISOString(),
+            timeMax: rangeEnd.toISOString(),
+            singleEvents: true,
+            maxResults: 2500,
+            pageToken: pageToken || undefined,
+        });
+        for (const item of response.items || []) {
+            if (item.status === "cancelled")
+                continue;
+            if ((_a = item.attendees) === null || _a === void 0 ? void 0 : _a.some((a) => a.self && a.responseStatus === "declined"))
+                continue;
+            const isAllDay = !!((_b = item.start) === null || _b === void 0 ? void 0 : _b.date);
+            if (isAllDay) {
+                const title = (item.summary || "").toLowerCase();
+                const noGuests = !item.attendees || item.attendees.every((a) => a.self);
+                if (title.includes("holiday") && noGuests)
+                    continue;
+            }
+            const startMs = new Date(isAllDay ? item.start.date : item.start.dateTime).getTime();
+            const endMs = new Date(isAllDay ? item.end.date : item.end.dateTime).getTime();
+            blocks.push({ start: startMs, end: endMs });
+        }
+        pageToken = (_c = response.nextPageToken) !== null && _c !== void 0 ? _c : undefined;
+    } while (pageToken);
+    return blocks;
 }
 function mergeBusyBlocks(blocks) {
     if (blocks.length === 0)
@@ -467,28 +488,15 @@ function getAvailableSlots(options) {
         minBreakMinutes: opts.minBreakMinutes,
         minMinutes: opts.minMinutes,
     };
-    // Fetch all events once per calendar across the full date range,
-    // pre-process (filter declined/transparent, extract timestamps) so
-    // GAS API properties are read exactly once per event, not per day.
+    // Fetch all events via Advanced Calendar Service — one HTTP round-trip
+    // per calendar for the entire date range. All event data (times, status,
+    // attendees) arrives as JSON, avoiding the per-property GAS API calls
+    // that made CalendarApp.getEvents() slow (~100ms per property × events).
     const rangeStart = new Date(businessDays[0]);
     rangeStart.setHours(opts.startHour, 0, 0, 0);
     const rangeEnd = new Date(businessDays[businessDays.length - 1]);
     rangeEnd.setHours(opts.endHour, 0, 0, 0);
-    const eventsByCalendar = calendars.map((calendar) => {
-        const events = calendar.getEvents(rangeStart, rangeEnd);
-        const blocks = [];
-        for (const event of events) {
-            if (isDeclined(event))
-                continue;
-            if (isTransparentAllDay(event))
-                continue;
-            blocks.push({
-                start: event.getStartTime().getTime(),
-                end: event.getEndTime().getTime(),
-            });
-        }
-        return blocks;
-    });
+    const eventsByCalendar = calendars.map((calendar) => fetchCalendarEvents(calendar.getId(), rangeStart, rangeEnd));
     for (const day of businessDays) {
         const dayStart = new Date(day);
         dayStart.setHours(opts.startHour, 0, 0, 0);
