@@ -1,55 +1,60 @@
 # One-time setup for the SPA deploy
 
-End-to-end instructions to get the SPA live on GitHub Pages. Most of this is click-through on Google's Cloud Console (no public API for OAuth consent screen or test users — sorry).
+End-to-end instructions to set this up from scratch. Most of this is click-through on Google's Cloud Console (no public API for OAuth consent screen — sorry). Google recently revamped this UI as "Google Auth Platform"; URLs below use the current paths.
+
+The instructions assume you want the same configuration as the live deployment: **Internal** user type (Workspace-only, no verification needed). For the External path, see the "Opening to non-Workspace users" section at the end.
 
 ## 0. Prerequisites
 
-- `gcloud` CLI authenticated: `gcloud auth login`
+- A Google Cloud project (create one at [console.cloud.google.com](https://console.cloud.google.com/)) — ideally inside a Google Workspace organization, which is what makes the Internal path available.
 - `gh` CLI authenticated: `gh auth status`
 - This repo cloned locally with `npm install` done
 
-## 1. Create the Google Cloud project + enable Calendar API (automated)
+Optional: `gcloud` CLI for the automated step. Not required if you do everything through the UI.
 
+## 1. Enable the Google Calendar API
+
+Open: `https://console.cloud.google.com/apis/library/calendar-json.googleapis.com?project=PROJECT_ID`
+
+Click **Enable**. Wait ~10 seconds.
+
+Or with `gcloud`:
 ```bash
-./scripts/setup-gcp.sh                        # uses default project ID
-./scripts/setup-gcp.sh my-existing-project    # reuse an existing project
+./scripts/setup-gcp.sh PROJECT_ID     # enables the API + sets as active project
 ```
-
-Creates the project (if new), enables the Google Calendar API, and sets it as your active gcloud project. The script prints links to the next manual steps; the rest of this doc is the long version.
 
 ## 2. Configure the OAuth consent screen (Console)
 
-Open: `https://console.cloud.google.com/apis/credentials/consent?project=PROJECT_ID`
+Open: `https://console.cloud.google.com/auth/overview?project=PROJECT_ID`
 
-1. **User Type**: choose **External**. Click **Create**. (Internal requires a Workspace domain and locks you to employees only — wrong for this app.)
-2. On the **App information** page:
+1. **Get started** (if prompted):
    - **App name**: `Time Slot Generator`
    - **User support email**: your email
-   - App logo: optional (skip)
-   - **App domain**: can leave empty in Testing status
-   - **Authorized domains**: skip for now — required only when you move to Production verification
-   - **Developer contact**: your email
-   - Click **Save and Continue**.
-3. On the **Scopes** page: click **Add or Remove Scopes**, find or paste `https://www.googleapis.com/auth/calendar.readonly` (filter by "calendar"), check it, click **Update**. This is the sole scope the app needs. Click **Save and Continue**.
-4. On the **Test users** page: click **Add Users**, paste your own email, then any colleagues (up to 100 total). Click **Save and Continue**.
-5. On the **Summary** page: click **Back to Dashboard**. **Publishing status** stays on **Testing**.
+   - **Audience / User type**: **Internal** (requires your project to belong to a Workspace organization)
+   - **Developer contact information**: your email
+   - Accept the User Data Policy, click **Create**.
+2. Navigate to **Data Access** in the left nav:
+   - Click **Add or Remove Scopes**
+   - Filter for `calendar.readonly`
+   - Check the row for `.../auth/calendar.readonly` (confirm it's the read-only one, not full `calendar`)
+   - Click **Update**, then **Save**
 
-To add more test users later: go back to this screen → Test users section → Add Users. No CLI for this.
+That's it for Internal apps. There's no Test users section — every account in the Workspace is automatically allowed.
 
 ## 3. Create the Web Application OAuth Client ID (Console)
 
-Open: `https://console.cloud.google.com/apis/credentials?project=PROJECT_ID`
+Open: `https://console.cloud.google.com/auth/clients?project=PROJECT_ID`
 
-1. Click **Create Credentials** → **OAuth client ID**.
+1. Click **+ Create Client**.
 2. **Application type**: **Web application**.
 3. **Name**: `Time Slot Generator (SPA)`.
 4. **Authorized JavaScript origins** — click **Add URI** for each:
    - `http://localhost:5173` (dev)
-   - `https://science.github.io` (production — the origin, not the full path)
+   - `https://science.github.io` (production — the origin only, not the full path)
 5. **Authorized redirect URIs**: leave empty. The GIS token-client flow uses the implicit in-page callback, not redirects.
 6. Click **Create**. A modal pops up with your **Client ID**. Copy it.
 
-The Client ID looks like `123456789012-abcdef...xyz.apps.googleusercontent.com`. There's no client secret to worry about — Web application clients don't have one when used in a browser.
+The Client ID looks like `123456789012-abcdef...xyz.apps.googleusercontent.com`. There's also a client secret shown — ignore it. Web application clients used from a browser don't use the secret. Google generates one anyway for API parity.
 
 ## 4. Set the Client ID locally + in GitHub (CLI)
 
@@ -72,18 +77,21 @@ gh secret list | grep VITE_GOOGLE_CLIENT_ID
 npm run dev
 ```
 
-Open the URL Vite prints (usually `http://localhost:5173/`). Click **Sign in with Google**. Expect:
+Open the URL Vite prints (usually `http://localhost:5173/gcal-timeslot-generator/`). Click **Sign in with Google**. Expect:
 
 1. Google account picker popup.
-2. **"Google hasn't verified this app"** warning screen. Click **Advanced** → **Go to Time Slot Generator (unsafe)**.
-3. Consent screen listing `calendar.readonly`. Click **Allow**.
-4. App loads, reads calendars, generates slots.
+2. Consent screen listing `calendar.readonly`. Click **Allow**.
+3. App loads, reads calendars, generates slots.
+
+No "unverified app" warning — that screen only shows for External-Testing apps.
 
 **Gotcha: if Vite binds to a port other than 5173** (because another dev server grabbed it), OAuth will fail because the origin won't match. Either kill the other dev server or add the new port to Authorized JavaScript origins in the Cloud Console.
 
+**Gotcha: if you get `access_denied`**, you're probably signed in with a non-Workspace account. Use your organization account (e.g. `@learningtapestry.com`).
+
 ## 6. Enable GitHub Pages
 
-One-time, from the repo settings page. Via the gh CLI:
+One-time. Via the gh CLI:
 
 ```bash
 gh api --method POST /repos/science/gcal-timeslot-generator/pages \
@@ -92,23 +100,35 @@ gh api --method PUT /repos/science/gcal-timeslot-generator/pages \
   -f "build_type=workflow"
 ```
 
-(The `|| PUT` fallback handles the case where Pages has already been enabled; the `POST` fails with 409 in that case.)
+(The `|| PUT` fallback handles the case where Pages is already enabled; the `POST` fails with 409 in that case.)
 
 Or through the UI: **Settings → Pages → Source: GitHub Actions**.
 
-## 7. Deploy
+## 7. Allow the `production` branch to deploy to Pages
+
+When you enable Pages with the workflow source, GitHub auto-creates a `github-pages` environment that only allows deploys from the default branch (`main`). We deploy from `production`, so we need to add that branch to the policy:
+
+```bash
+gh api --method POST \
+  /repos/science/gcal-timeslot-generator/environments/github-pages/deployment-branch-policies \
+  -f "name=production" -f "type=branch"
+```
+
+If you skip this step, your first deploy run will fail immediately in the `deploy` job with zero steps executed (the environment gate rejects it).
+
+## 8. Deploy
 
 ```bash
 git push origin main:production
 ```
 
-This triggers `.github/workflows/deploy-pages.yml`, which:
+This triggers `.github/workflows/deploy-pages.yml`. If this is the *very first* time the `production` branch is created, GitHub sometimes doesn't fire the workflow automatically — manually dispatch it:
 
-1. Checks out `production`
-2. `npm ci`
-3. `npm run build:web` with `VITE_GOOGLE_CLIENT_ID` injected from the secret
-4. Uploads `dist-web/` as a Pages artifact
-5. Deploys to `https://science.github.io/gcal-timeslot-generator/`
+```bash
+gh workflow run deploy-pages.yml --ref production
+```
+
+Subsequent pushes to `production` trigger the workflow as expected.
 
 Watch the run:
 
@@ -118,30 +138,34 @@ gh run watch
 gh run list --workflow=deploy-pages.yml --limit=1
 ```
 
-First deploy takes ~1–2 minutes. Subsequent deploys are fast because of npm cache.
+First deploy takes ~25 seconds. Subsequent deploys are similar with the npm cache warm.
 
-## 8. Verify production
+## 9. Verify production
 
-Open `https://science.github.io/gcal-timeslot-generator/`. Sign in with an **allowlisted test user** account. Same unverified-app warning flow as local. Should land on the app screen with calendars loaded.
-
-If you get `access_denied`: the email isn't on the test users list. Add it in the consent screen (step 2.4 above).
+Open `https://science.github.io/gcal-timeslot-generator/`. Sign in with a Workspace account. No warnings; app should load calendars immediately.
 
 ---
 
-## Ongoing: adding new users to the allowlist
+## Opening to non-Workspace users (External path)
 
-1. Go to `https://console.cloud.google.com/apis/credentials/consent?project=PROJECT_ID`
-2. Scroll to **Test users** → **Add Users** → paste email(s) → Save
+If you later want to open this to personal Gmail accounts or other companies, you'll switch the OAuth app to **External** user type. This introduces:
 
-Cap is 100. When you hit it, it's time to apply for Google's sensitive-scope verification (free, 4–8 weeks — see README's "Distribution notes" section).
+- A 100-user cap with an explicit allowlist (until you complete Google verification)
+- The "Google hasn't verified this app" warning on first sign-in per account
+- 7-day refresh-token expiry (users re-sign-in roughly weekly)
 
-## When you're ready for verification
+To switch:
 
-Publishing status → **In production**. Google requires at that point:
+1. Go to the Audience page: `https://console.cloud.google.com/auth/audience?project=PROJECT_ID`
+2. Click **Make external**.
+3. Add test users: **Audience** → **Test users** section → **+ Add users** → paste emails → Save. Max 100.
+
+To remove all three constraints, apply for Google's sensitive-scope verification (free but bureaucratic, ~4–8 weeks). Requirements:
+
 - Homepage URL (the GitHub Pages URL is fine)
-- Privacy policy URL (host a single-page notice on the same site or a separate repo)
-- Terms of service URL (likewise)
-- A demo video (~2 min) showing the scope being used
-- A justification: why does the app need calendar.readonly?
+- Privacy policy URL (host a one-page notice)
+- Terms of service URL
+- Demo video (~2 min) showing the `calendar.readonly` scope being used
+- Justification letter
 
-No code changes required in this repo — it's purely Cloud Console + documentation artifacts.
+No code changes required in this repo for either switch — it's all Cloud Console state.

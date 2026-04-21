@@ -17,6 +17,13 @@ export interface AuthState {
   accessToken: string | null;
   expiresAt: number | null;
   isAuthenticated: boolean;
+  /**
+   * Set when the most recent sign-in attempt failed (wrong Workspace
+   * domain, popup closed, etc.). Cleared once a successful sign-in
+   * happens. Callers can show a targeted error message instead of a
+   * generic "not signed in" state.
+   */
+  lastError?: string;
 }
 
 export class AuthRequiredError extends Error {
@@ -134,9 +141,13 @@ function handleTokenResponse(response: GisTokenResponse): void {
   pendingResolvers = [];
 
   if (response.error || !response.access_token) {
-    // Testing-mode 7-day refresh expiry and unallowlisted users land here.
-    // Clear cached token so the UI can prompt for sign-in.
-    saveState(emptyState());
+    // Users outside the Workspace, dismissed popups, and token-refresh
+    // failures land here. Surface the error text so the UI can show a
+    // targeted message (e.g. "this app only accepts @learningtapestry.com").
+    const errText = response.error_description
+      || response.error
+      || "Sign-in did not complete.";
+    saveState({ ...emptyState(), lastError: errText });
     resolvers.forEach((r) => r(null));
     return;
   }

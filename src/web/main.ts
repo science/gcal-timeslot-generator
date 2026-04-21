@@ -37,6 +37,15 @@ and fill in a Client ID from
   if (signInBtn) signInBtn.disabled = true;
 }
 
+function handleAuthRequired(): void {
+  appStarted = false;
+  setBodyAuthAttr("signed-out");
+  showAuthStatus(
+    "Your session expired. Sign in again to continue.",
+    "info",
+  );
+}
+
 function handleAuthChange(state: AuthState): void {
   if (state.isAuthenticated) {
     setBodyAuthAttr("signed-in");
@@ -44,24 +53,26 @@ function handleAuthChange(state: AuthState): void {
       appStarted = true;
       startApp({ onAuthRequired: handleAuthRequired });
     }
-  } else {
-    setBodyAuthAttr("signed-out");
-    // Show the "first time?" warning on the sign-in card once GIS is ready.
-    const warning = document.getElementById("unverifiedWarning");
-    if (warning) warning.hidden = false;
+    return;
+  }
+  setBodyAuthAttr("signed-out");
+  if (state.lastError) {
+    showAuthStatus(
+      `Sign-in failed: ${state.lastError} This app only accepts @learningtapestry.com Google accounts.`,
+      "error",
+    );
   }
 }
 
-function handleAuthRequired(): void {
-  // Called when an API call bubbles up AuthRequiredError (session gone,
-  // 7-day testing refresh expired, etc.). Flip back to signed-out view.
-  appStarted = false;
-  setBodyAuthAttr("signed-out");
+function showAuthStatus(message: string, kind: "error" | "info"): void {
   const status = document.getElementById("authStatus");
-  if (status) {
-    status.hidden = false;
-    status.textContent = "Your session expired. Sign in again to continue.";
-  }
+  if (!status) return;
+  status.hidden = false;
+  status.innerHTML = "";
+  const node = document.createElement("div");
+  node.className = kind === "error" ? "error" : "info";
+  node.textContent = message;
+  status.appendChild(node);
 }
 
 function setVersionTag(): void {

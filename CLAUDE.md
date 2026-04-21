@@ -35,12 +35,24 @@ npx jest tests/server/SlotCalculator.test.ts
 ## SPA dev setup
 
 1. Copy `.env.example` → `.env.local` (gitignored).
-2. Create an OAuth 2.0 Client ID in [Google Cloud Console](https://console.cloud.google.com/apis/credentials) (Web application type). Add `http://localhost:5173` to Authorized JavaScript origins. Enable the Google Calendar API.
+2. Create an OAuth 2.0 Client ID in [Google Cloud Console](https://console.cloud.google.com/auth/clients) (Web application type). Add `http://localhost:5173` to Authorized JavaScript origins. Enable the Google Calendar API.
 3. Set `VITE_GOOGLE_CLIENT_ID` in `.env.local`.
-4. Add your own email to the OAuth consent screen's test users list (the app is in Testing publishing status — up to 100 allowlisted users).
+4. Sign in with an account from the app's configured Workspace domain (see below).
 5. `npm run dev`.
 
 **The Client ID is baked into the production build.** Vite replaces `import.meta.env.VITE_GOOGLE_CLIENT_ID` with a string literal at build time, so the deployed bundle contains the ID. Client IDs aren't secret — Google's consent flow enforces the authorized origin. If the env var is unset at build time, Vite tree-shakes the post-auth code away and the site renders a "missing config" error; this is by design.
+
+### OAuth publishing mode
+
+The live deployment runs the OAuth app as **Internal** within the Learning Tapestry Google Workspace (`@learningtapestry.com`). Consequences:
+
+- No Google verification step is required for the sensitive `calendar.readonly` scope.
+- Only `@learningtapestry.com` accounts can sign in; other accounts get `access_denied` at the consent step. `src/web/auth.ts` surfaces this via `AuthState.lastError`, and `src/web/main.ts` renders a targeted message in the sign-in card.
+- No "unverified app" warning screen.
+- No 100-user allowlist.
+- No 7-day refresh-token expiry.
+
+Switching to **External** (to open beyond the Workspace) reintroduces all of those constraints until Google verification is completed. See `docs/SETUP.md` § "Opening to non-Workspace users".
 
 ## SPA deploy pipeline
 
@@ -105,7 +117,7 @@ src/
 
 **Key constraint (Apps Script):** GAS has no module system. All `.gs` files share a global scope. The Rollup plugin `stripModuleSyntax` removes `export`/`import` statements. Write normal ES module syntax in source; it's stripped at build time.
 
-**Key constraint (SPA):** All calendar data stays client-side. No server. OAuth 2.0 in the browser via the GIS token-client flow — access tokens live in `localStorage` and are silently refreshed via an invisible iframe when they expire (1 hour typical). In Testing publishing status, GIS silent refresh fails after ~7 days and the user re-authenticates via the sign-in button.
+**Key constraint (SPA):** All calendar data stays client-side. No server. OAuth 2.0 in the browser via the GIS token-client flow — access tokens live in `localStorage` and are silently refreshed via an invisible iframe when they expire (1 hour typical). For an Internal-mode app like the live deployment, silent refresh keeps working indefinitely; for External-Testing deployments, silent refresh fails after ~7 days and the user re-authenticates via the sign-in button.
 
 ## TypeScript configs
 

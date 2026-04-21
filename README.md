@@ -2,13 +2,17 @@
 
 A browser app that reads your Google Calendar and generates copyable time-slot text for scheduling emails and messages. Instead of going back and forth about availability, open the app, review your free slots, and paste formatted availability into an email or chat.
 
-## Use it
+## Use it — closed beta (Learning Tapestry only)
 
 **Hosted app:** [science.github.io/gcal-timeslot-generator](https://science.github.io/gcal-timeslot-generator/)
 
-1. Ask the maintainer to add your Google email to the allowlist (the app is in OAuth **testing mode** while the user base grows, capped at 100 users). This is a one-time step that takes about 30 seconds.
-2. Visit the link, click **Sign in with Google**, and grant read-only calendar access.
-3. On first sign-in you'll see a screen titled **"Google hasn't verified this app"**. Click **Advanced** → **Go to Time Slot Generator (unsafe)** → **Allow**. This is expected for apps in testing mode and will go away once the app is submitted for Google verification.
+> **Closed beta.** Access is currently limited to `@learningtapestry.com` Google Workspace accounts. Personal Gmail accounts and other company domains will be rejected at sign-in. The OAuth app is configured as **Internal** within the Learning Tapestry Workspace — if you're a member of the domain, no allowlist or verification step is required.
+
+1. Open the link, click **Sign in with Google**.
+2. Pick your `@learningtapestry.com` account.
+3. Grant read-only calendar access on the consent screen.
+
+That's it — the app loads and generates slots. No "unverified app" warning, no token expiry within the session.
 
 Your calendar data stays in your browser — the app has no backend. Nothing is transmitted to the maintainer or anyone else. The source is all here for you to audit.
 
@@ -253,14 +257,28 @@ Tests cover all pure computation and formatting functions. `jest.useFakeTimers()
 
 ## Distribution notes
 
-The SPA relies on the **`calendar.readonly`** OAuth scope, which Google classifies as **sensitive** (not restricted — that's a different tier that requires a paid third-party security assessment).
+The SPA uses the **`calendar.readonly`** OAuth scope, which Google classifies as a **sensitive** scope.
 
-Sensitive-scope verification by Google is **free** but bureaucratic: OAuth consent screen with privacy policy, homepage, and terms of service URLs, a demo video, a justification letter, and a ~4–8 week back-and-forth with their review team. Until that's done, the SPA stays in **Testing** publishing status, which:
+### Current setup: Internal user type (Workspace-only)
 
-- Caps the user base at 100 allowlisted accounts (add each email in Google Cloud Console → OAuth consent screen → Test users).
-- Shows the "Google hasn't verified this app" warning to everyone on first sign-in.
-- Expires refresh tokens every 7 days, requiring users to re-sign-in via the button.
+The OAuth app is configured as **Internal** in the Learning Tapestry Google Cloud project, meaning only `@learningtapestry.com` accounts can sign in. Internal apps in Google Workspace:
 
-Moving to Production (post-verification) removes all three of those. No code changes needed — it's a Cloud Console flip.
+- Don't require Google verification for sensitive scopes
+- Don't show the "Google hasn't verified this app" warning
+- Have no user cap
+- Don't enforce the 7-day refresh-token expiry that Testing-mode External apps do
+- Can't be used by anyone outside the Workspace domain
 
-**Google Workspace Marketplace** listing is a separate path that also requires verification plus some marketplace-specific UX and a listing page. Not pursued here because the static-site + direct sign-in route delivers the same "click to use" UX without the marketplace overhead.
+This is the easiest possible deployment model, but it's a dead end for wider public use — personal Gmail accounts and other company domains get rejected at sign-in.
+
+### If broader access is needed later
+
+Switching the OAuth app to **External** user type unlocks non-Workspace accounts. That path adds two constraints until Google verification is completed:
+
+- A 100-user cap with an explicit test-users allowlist (Cloud Console → Audience → Test users)
+- The "Google hasn't verified this app" warning on first sign-in per account
+- 7-day refresh-token expiry (users re-sign-in roughly weekly)
+
+**Sensitive-scope verification** by Google is free but bureaucratic: consent screen with privacy policy, homepage, and terms of service URLs; a demo video; a justification letter; a ~4–8 week review cycle. Once verified, all three External-Testing constraints go away. No code changes are required — it's a Cloud Console flip.
+
+**Google Workspace Marketplace** listing is a separate path that also requires verification plus marketplace-specific listing content. Not pursued here; the static-site + direct sign-in route delivers the same "click to use" UX without the marketplace overhead.
