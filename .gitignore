@@ -1,8 +1,16 @@
 node_modules/
 dist/
+dist-web/
 .clasp.json
 clasp-auth-code.txt
+.env
+.env.local
+.env.*.local
 
 # Local data dumps (user's calendar exports for debugging)
 calc-avail.txt
 *.ical.zip
+
+# OAuth credentials downloaded from Google Cloud Console
+client_secret*.json
+gitignore-this-*

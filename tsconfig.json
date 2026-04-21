@@ -11,5 +11,5 @@
     "rootDir": "src",
     "sourceMap": false
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/lib/**/*.ts", "src/server/**/*.ts"]
 }

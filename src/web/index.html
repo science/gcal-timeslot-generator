@@ -1,0 +1,517 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Time Slot Generator</title>
+  <link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📅</text></svg>">
+  <style>
+    :root {
+      --primary: #1a73e8;
+      --primary-hover: #1557b0;
+      --success: #0d904f;
+      --bg: #f8f9fa;
+      --card-bg: #ffffff;
+      --border: #dadce0;
+      --text: #202124;
+      --text-secondary: #5f6368;
+      --slot-bg: #e8f0fe;
+      --danger: #c5221f;
+      --danger-bg: #fce8e6;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Google Sans', 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      padding: 16px;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    body[data-auth="signed-out"] .app-view,
+    body[data-auth="loading"] .app-view,
+    body[data-auth="signed-in"] .auth-view {
+      display: none;
+    }
+
+    h1 {
+      font-size: 20px;
+      font-weight: 500;
+      margin-bottom: 12px;
+    }
+
+    .auth-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 32px;
+      margin-top: 48px;
+      text-align: center;
+    }
+
+    .auth-card h1 {
+      font-size: 22px;
+      margin-bottom: 16px;
+    }
+
+    .auth-card p {
+      color: var(--text-secondary);
+      margin-bottom: 20px;
+      font-size: 14px;
+      text-align: left;
+    }
+
+    .auth-card .warning {
+      background: #fff8e1;
+      border: 1px solid #f9d975;
+      color: #5a4100;
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      text-align: left;
+      margin: 16px 0;
+    }
+
+    .auth-card .btn {
+      margin-top: 4px;
+    }
+
+    .auth-status {
+      text-align: center;
+      color: var(--text-secondary);
+      padding: 48px 0;
+      font-size: 14px;
+    }
+
+    .header-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .signout-btn {
+      background: none;
+      border: none;
+      color: var(--text-secondary);
+      font-size: 12px;
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 4px;
+    }
+    .signout-btn:hover {
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    .copy-bar { margin-bottom: 16px; }
+
+    .controls {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+
+    .controls label {
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .controls select, .controls input[type="number"] {
+      padding: 6px 10px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-size: 14px;
+      background: var(--card-bg);
+    }
+
+    .controls .checkbox-control {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .controls .checkbox-control input[type="checkbox"] {
+      accent-color: var(--primary);
+    }
+
+    details.advanced { margin-bottom: 16px; }
+
+    details.advanced summary {
+      font-size: 13px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      margin-bottom: 8px;
+    }
+
+    .advanced-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px 16px;
+      font-size: 13px;
+    }
+
+    .advanced-grid label {
+      color: var(--text-secondary);
+      display: block;
+      margin-bottom: 2px;
+    }
+
+    .advanced-grid select {
+      width: 100%;
+      padding: 4px 8px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-size: 13px;
+      background: var(--card-bg);
+    }
+
+    .calendar-list {
+      grid-column: 1 / -1;
+      border-top: 1px solid var(--border);
+      padding-top: 8px;
+      margin-top: 4px;
+    }
+
+    .calendar-list .cal-heading {
+      color: var(--text-secondary);
+      margin-bottom: 4px;
+      display: block;
+    }
+
+    .cal-label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 0;
+      color: var(--text);
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    .cal-label input[type="checkbox"] { accent-color: var(--primary); }
+    .cal-label.cal-primary { font-weight: 500; }
+
+    .day-group {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      margin-bottom: 6px;
+      overflow: hidden;
+    }
+
+    .day-header {
+      padding: 5px 10px;
+      font-weight: 500;
+      font-size: 13px;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .day-header input[type="checkbox"] { accent-color: var(--primary); }
+
+    .slots-wrap {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      padding: 6px 8px;
+    }
+
+    .slot-item {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+    }
+
+    .slot-item input[type="checkbox"] {
+      accent-color: var(--primary);
+      margin: 0;
+    }
+
+    .slot-time {
+      background: var(--slot-bg);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: 'Roboto Mono', monospace;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .btn {
+      padding: 10px 24px;
+      border: none;
+      border-radius: 4px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+    }
+    .btn-primary:hover { background: var(--primary-hover); }
+    .btn-primary.copied { background: var(--success); }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .btn-secondary {
+      background: var(--card-bg);
+      color: var(--primary);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover { background: var(--bg); }
+
+    .btn-google {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: white;
+      color: #3c4043;
+      border: 1px solid var(--border);
+      padding: 10px 20px;
+      font-weight: 500;
+    }
+    .btn-google:hover { background: #f1f3f4; }
+    .btn-google svg { width: 18px; height: 18px; }
+
+    .preview {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+      font-size: 13px;
+      font-family: 'Roboto Mono', monospace;
+      color: var(--text-secondary);
+      height: 300px;
+      width: 100%;
+      box-sizing: border-box;
+      resize: vertical;
+    }
+
+    .preview-label {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+      margin-top: 16px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .preview-label:first-of-type { margin-top: 0; }
+
+    .loading {
+      text-align: center;
+      padding: 40px;
+      color: var(--text-secondary);
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 24px;
+      height: 24px;
+      border: 3px solid var(--border);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-bottom: 8px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px;
+      color: var(--text-secondary);
+      font-size: 14px;
+    }
+
+    .error {
+      background: var(--danger-bg);
+      color: var(--danger);
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      margin-bottom: 12px;
+    }
+
+    .version-tag {
+      text-align: right;
+      font-size: 11px;
+      color: #9aa0a6;
+      margin-top: 12px;
+    }
+    .version-tag a { color: #9aa0a6; text-decoration: none; }
+    .version-tag a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body data-auth="loading">
+
+<div class="auth-view">
+  <div class="auth-card">
+    <h1>Time Slot Generator</h1>
+    <p>
+      Generates copyable time-slot text for scheduling emails and messages.
+      Scans your Google Calendar for free slots in the next few business days
+      and lets you paste formatted availability into any email or chat.
+    </p>
+    <p>
+      Sign in with your Google account to grant <strong>read-only</strong>
+      access to your calendar. Your calendar data stays in your browser &mdash;
+      no server sees it.
+    </p>
+    <div id="authStatus" class="auth-status" hidden></div>
+    <div class="warning" id="unverifiedWarning" hidden>
+      <strong>First time?</strong> You'll see a &ldquo;Google hasn't verified this app&rdquo;
+      screen. Click <em>Advanced</em> &rarr; <em>Go to Time Slot Generator (unsafe)</em> &rarr; <em>Allow</em>.
+      This app is in testing mode and only people explicitly allowlisted can sign in.
+    </div>
+    <button id="signInBtn" class="btn btn-google">
+      <svg viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill="#4285F4" d="M17.64 9.2045c0-.638-.057-1.251-.164-1.841H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332C2.438 15.983 5.482 18 9 18z"/><path fill="#FBBC05" d="M3.964 10.71c-.18-.54-.282-1.117-.282-1.71s.102-1.17.282-1.71V4.958H.957C.347 6.173 0 7.548 0 9s.348 2.827.957 4.042l3.007-2.332z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.438 2.017.957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"/></svg>
+      Sign in with Google
+    </button>
+  </div>
+</div>
+
+<div class="app-view">
+  <div class="header-bar">
+    <h1>Time Slot Generator</h1>
+    <button id="signOutBtn" class="signout-btn" title="Sign out">Sign out</button>
+  </div>
+
+  <div class="copy-bar">
+    <button id="copyBtn" class="btn btn-primary" disabled>Copy to Clipboard</button>
+  </div>
+
+  <div class="controls">
+    <div>
+      <label for="numDays">Days:</label>
+      <select id="numDays">
+        <option value="3">3 days</option>
+        <option value="5" selected>5 days</option>
+        <option value="10">10 days</option>
+      </select>
+    </div>
+    <div>
+      <label for="timezone">Timezone:</label>
+      <select id="timezone">
+        <option value="America/Los_Angeles" selected>Pacific</option>
+        <option value="America/Denver">Mountain</option>
+        <option value="America/Chicago">Central</option>
+        <option value="America/New_York">Eastern</option>
+      </select>
+    </div>
+    <div>
+      <label for="formatStyle">Format:</label>
+      <select id="formatStyle">
+        <option value="bullets">Bullets</option>
+        <option value="compact" selected>Compact</option>
+      </select>
+    </div>
+    <div class="checkbox-control">
+      <input type="checkbox" id="includeToday">
+      <label for="includeToday">Include today</label>
+    </div>
+    <button id="refreshBtn" class="btn btn-secondary">Refresh</button>
+  </div>
+
+  <details class="advanced">
+    <summary>Advanced settings</summary>
+    <div class="advanced-grid">
+      <div>
+        <label for="startHour">Start hour</label>
+        <select id="startHour">
+          <option value="7">7am</option>
+          <option value="8">8am</option>
+          <option value="9" selected>9am</option>
+          <option value="10">10am</option>
+        </select>
+      </div>
+      <div>
+        <label for="endHour">End hour</label>
+        <select id="endHour">
+          <option value="16">4pm</option>
+          <option value="17" selected>5pm</option>
+          <option value="18">6pm</option>
+          <option value="19">7pm</option>
+        </select>
+      </div>
+      <div>
+        <label for="maxBlock">Max meeting block</label>
+        <select id="maxBlock">
+          <option value="0">Off</option>
+          <option value="60">1h</option>
+          <option value="90">1.5h</option>
+          <option value="120" selected>2h</option>
+          <option value="180">3h</option>
+        </select>
+      </div>
+      <div>
+        <label for="breakAfter">Required break</label>
+        <select id="breakAfter">
+          <option value="15">15 min</option>
+          <option value="30" selected>30 min</option>
+          <option value="45">45 min</option>
+          <option value="60">60 min</option>
+        </select>
+      </div>
+      <div>
+        <label for="minGap">Ignore gaps under</label>
+        <select id="minGap">
+          <option value="0">Off</option>
+          <option value="5">5 min</option>
+          <option value="10">10 min</option>
+          <option value="15" selected>15 min</option>
+          <option value="20">20 min</option>
+        </select>
+      </div>
+      <div>
+        <label for="roundTo">Round to nearest</label>
+        <select id="roundTo">
+          <option value="5">5 min</option>
+          <option value="10">10 min</option>
+          <option value="15" selected>15 min</option>
+          <option value="30">30 min</option>
+        </select>
+      </div>
+      <div class="calendar-list">
+        <span class="cal-heading">Calendars</span>
+        <div id="calendarList">Loading calendars&hellip;</div>
+        <div style="margin-top: 8px;">
+          <label for="calendarMode" style="color: var(--text-secondary); display: block; margin-bottom: 2px;">Calendar mode</label>
+          <select id="calendarMode" style="width: 100%; padding: 4px 8px; border: 1px solid var(--border); border-radius: 4px; font-size: 13px; background: var(--card-bg);">
+            <option value="mine" selected>My calendars</option>
+            <option value="group">Group scheduling</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  </details>
+
+  <div class="preview-label">Preview</div>
+  <textarea id="preview" class="preview" spellcheck="false">Loading&hellip;</textarea>
+
+  <div class="preview-label">Select Time Slots</div>
+  <div id="content">
+    <div class="loading">
+      <div class="spinner"></div>
+      <div>Loading your availability&hellip;</div>
+    </div>
+  </div>
+
+  <div class="version-tag">
+    <span id="versionTag"></span>
+  </div>
+</div>
+
+<script type="module" src="./main.ts"></script>
+</body>
+</html>

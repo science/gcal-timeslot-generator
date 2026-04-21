@@ -5,13 +5,17 @@
   "private": true,
   "scripts": {
     "test": "jest",
-    "clean": "rm -rf dist",
-    "build": "npm run clean && rollup -c rollup.config.mjs",
+    "clean": "rm -rf dist dist-web",
+    "build": "rm -rf dist && rollup -c rollup.config.mjs",
     "login": "npx @google/clasp login --no-localhost",
     "push": "npm run build && npx @google/clasp push --force",
     "deploy": "npm run push && node scripts/deploy.js",
     "open": "npx @google/clasp open --webapp",
-    "watch": "rollup -c rollup.config.mjs --watch"
+    "watch": "rollup -c rollup.config.mjs --watch",
+    "dev": "vite",
+    "build:web": "rm -rf dist-web && tsc -p tsconfig.web.json && vite build",
+    "preview:web": "vite preview",
+    "check:web": "tsc -p tsconfig.web.json"
   },
   "devDependencies": {
     "@google/clasp": "^2.4.2",
@@ -25,6 +29,7 @@
     "ts-jest": "^29.4.6",
     "ts-node": "^10.9.2",
     "tslib": "^2.8.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vite": "^7.3.2"
   }
 }

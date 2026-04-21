@@ -1,18 +1,28 @@
 # Google Calendar Time Slot Generator
 
-A Google Apps Script web app that reads your Google Calendar and generates copyable time-slot text for scheduling emails and messages. Instead of going back and forth about availability, open the app, review your free slots, and paste formatted availability into an email or chat.
+A browser app that reads your Google Calendar and generates copyable time-slot text for scheduling emails and messages. Instead of going back and forth about availability, open the app, review your free slots, and paste formatted availability into an email or chat.
+
+## Use it
+
+**Hosted app:** [science.github.io/gcal-timeslot-generator](https://science.github.io/gcal-timeslot-generator/)
+
+1. Ask the maintainer to add your Google email to the allowlist (the app is in OAuth **testing mode** while the user base grows, capped at 100 users). This is a one-time step that takes about 30 seconds.
+2. Visit the link, click **Sign in with Google**, and grant read-only calendar access.
+3. On first sign-in you'll see a screen titled **"Google hasn't verified this app"**. Click **Advanced** → **Go to Time Slot Generator (unsafe)** → **Allow**. This is expected for apps in testing mode and will go away once the app is submitted for Google verification.
+
+Your calendar data stays in your browser — the app has no backend. Nothing is transmitted to the maintainer or anyone else. The source is all here for you to audit.
 
 ## Features
 
 - Scans your Google Calendar for the next N business days (3, 5, or 10)
 - Computes free time slots within configurable working hours
-- **Multi-calendar support** -- select which calendars contribute to busy-time calculation (personal + work, or switch between different people's calendars)
-- **Meeting fatigue breaks** -- automatically inserts buffer time after long meeting blocks, with smart gap classification (micro-gaps merge, short gaps may close, real breaks always preserved)
-- **Non-overlapping slots** -- each free gap produces clean, non-overlapping time slots. Short constrained slots (e.g. 30 min between long blocks) are labeled "(max 30 min)" when adjacent to other slots so readers don't assume they can book longer
-- **Slot rounding** -- round slot start times to clean increments (5, 10, 15, or 30 min) so you never propose a meeting at 2:55pm
-- **Editable preview** -- the preview area is an editable text box; clean up or remove slots before copying
-- **Timezone display** -- format times in Pacific, Mountain, Central, or Eastern
-- **Include today** -- optionally show remaining availability for the current day
+- **Multi-calendar support** — select which calendars contribute to busy-time calculation (personal + work, or switch between different people's calendars)
+- **Meeting fatigue breaks** — automatically inserts buffer time after long meeting blocks, with smart gap classification (micro-gaps merge, short gaps may close, real breaks always preserved)
+- **Non-overlapping slots** — each free gap produces clean, non-overlapping time slots. Short constrained slots (e.g. 30 min between long blocks) are labeled "(max 30 min)" when adjacent to other slots so readers don't assume they can book longer
+- **Slot rounding** — round slot start times to clean increments (5, 10, 15, or 30 min) so you never propose a meeting at 2:55pm
+- **Editable preview** — the preview area is an editable text box; clean up or remove slots before copying
+- **Timezone display** — format times in Pacific, Mountain, Central, or Eastern
+- **Include today** — optionally show remaining availability for the current day
 - Check/uncheck individual slots or entire days before copying
 - Two output formats: bullets (email-friendly) or compact (chat-friendly)
 - One-click copy to clipboard
@@ -30,88 +40,6 @@ The main screen shows a live preview of the formatted availability text at top, 
 </p>
 
 Advanced settings let you configure working hours, meeting fatigue breaks, and which calendars to include in the busy-time calculation.
-
-## Quick Install (No Developer Tools Required)
-
-This method uses only your browser. No Node.js, git, or command line needed.
-
-### 1. Create a new Apps Script project
-
-1. Go to [script.google.com](https://script.google.com) and sign in with your Google account
-2. Click **New project**
-3. Name it "Time Slot Generator" (click "Untitled project" at the top)
-
-### 2. Add the code files
-
-The pre-built files are in the [`release/`](release/) folder of this repository.
-
-**Replace Code.gs:**
-
-1. In the Apps Script editor, you'll see a file called `Code.gs` with a default `myFunction()` in it
-2. Select all the text and delete it
-3. Open [`release/Code.gs`](release/Code.gs) in this repository and copy its entire contents
-4. Paste into the empty `Code.gs` file in the editor
-
-**Add index.html:**
-
-1. In the left sidebar, click the **+** button next to "Files"
-2. Select **HTML**
-3. Name it `index` (it will become `index.html`)
-4. Delete the default HTML content
-5. Open [`release/index.html`](release/index.html) in this repository and copy its entire contents
-6. Paste into the empty `index.html` file
-
-**Update appsscript.json:**
-
-1. In the left sidebar, click the **gear icon** (Project Settings)
-2. Check the box **"Show 'appsscript.json' manifest file in editor"**
-3. Go back to the Editor (left sidebar, `< >` icon)
-4. Click on `appsscript.json` in the file list
-5. Select all and replace with:
-
-```json
-{
-  "timeZone": "America/Los_Angeles",
-  "dependencies": {
-    "enabledAdvancedServices": [{
-      "userSymbol": "Calendar",
-      "serviceId": "calendar",
-      "version": "v3"
-    }]
-  },
-  "exceptionLogging": "STACKDRIVER",
-  "runtimeVersion": "V8",
-  "webapp": {
-    "executeAs": "USER_DEPLOYING",
-    "access": "MYSELF"
-  }
-}
-```
-
-### 3. Enable the Calendar API
-
-1. In the left sidebar, click the **+** next to **Services**
-2. Find **Google Calendar API** in the list
-3. Click **Add**
-
-### 4. Deploy as a web app
-
-1. Click **Deploy** > **New deployment**
-2. Click the **gear icon** next to "Select type" and choose **Web app**
-3. Fill in:
-   - **Description**: "Time Slot Generator" (or anything you like)
-   - **Execute as**: "Me" (your email address)
-   - **Who has access**: "Only myself"
-4. Click **Deploy**
-5. Click **Authorize access** when prompted
-6. In the popup, select your Google account
-7. If you see "Google hasn't verified this app", click **Advanced** > **Go to Time Slot Generator (unsafe)** -- this is your own script, so it's safe
-8. Click **Allow** to grant calendar read access
-9. Copy the **Web app URL** shown -- bookmark this link
-
-### 5. Use it
-
-Open the Web app URL. The app reads your Google Calendar, computes your free time slots, and lets you copy formatted availability text to your clipboard.
 
 ## Usage
 
@@ -141,51 +69,94 @@ Click "Advanced settings" to expand:
 
 By default, only your primary calendar is checked. To merge availability across multiple calendars:
 
-- **Personal + work**: Check both calendars. Events from all checked calendars are combined -- overlapping events merge naturally, so a meeting on your work calendar and a dentist appointment on your personal calendar both block that time.
+- **Personal + work**: Check both calendars. Events from all checked calendars are combined — overlapping events merge naturally, so a meeting on your work calendar and a dentist appointment on your personal calendar both block that time.
 - **Admin / assistant use**: If you have view access to other people's calendars, they'll appear in the list. Check one person's calendar at a time to generate their availability.
 
-## Updating to a New Version
+## Alternative: self-hosted Apps Script install
 
-When a new version is released, update your Apps Script project to get bug fixes and new features. Your settings are saved automatically and will carry over.
+Not on the allowlist yet? You can run your own private copy as a Google Apps Script web app. This takes ~10 minutes through `script.google.com` and doesn't require allowlisting — it's entirely under your own Google account.
 
-### What's New in v0.3.0
+<details>
+<summary>Full copy-paste install instructions</summary>
 
-- **Complete fatigue algorithm rewrite**: Slot computation rebuilt from scratch against a reference oracle that validates correctness from first principles. All 381 permutations of block/gap arrangements pass both soundness (no invalid meetings offered) and completeness (no valid meetings missed) checks.
-- **Non-overlapping slots**: Free gaps now produce clean, non-overlapping time slots instead of confusing overlapping left/right/middle anchored ranges.
-- **Adjacent-slot disambiguation**: Back-to-back 30-min slots are labeled "(max 30 min)" so readers don't visually merge them into a bookable 60+ minute window.
-- **~5x faster loading**: Switched from CalendarApp (which lazy-loads each event property as a separate API round-trip) to the Advanced Calendar Service, which returns all event data in a single bulk JSON response per calendar.
-- **Editable preview**: The preview area is now a textarea you can edit before copying — remove unwanted slots or tweak wording in-place.
-- **Slot rounding**: Slot start times are now rounded up to clean increments (default 15 min), so you won't see awkward times like 2:55pm — it becomes 3:00pm instead. Configurable to 5, 10, 15, or 30 minutes in Advanced settings.
-- **Clearer labels**: "Break after" is now "Required break" and "Min gap for break" is now "Ignore gaps under" to better describe what they do.
+### 1. Create a new Apps Script project
 
-### How to Update
+1. Go to [script.google.com](https://script.google.com) and sign in with your Google account.
+2. Click **New project**.
+3. Name it "Time Slot Generator" (click "Untitled project" at the top).
 
-1. Open your Apps Script project at [script.google.com](https://script.google.com)
-2. Click on `Code.gs` in the file list
-3. Select all (`Ctrl+A`) and delete
-4. Open [`release/Code.gs`](release/Code.gs) in this repository, copy the entire contents, and paste
-5. Click on `index.html` in the file list
-6. Select all (`Ctrl+A`) and delete
-7. Open [`release/index.html`](release/index.html) in this repository, copy the entire contents, and paste
-8. Update `appsscript.json` the same way (copy from [`release/appsscript.json`](release/appsscript.json))
-9. If you haven't already, enable the **Google Calendar API** under Services (click **+** next to Services, find Google Calendar API, click Add)
-10. Click **Deploy** > **Manage deployments**
-11. Click the **pencil icon** on your existing deployment
-12. Change **Version** to "New version"
-13. Click **Deploy**
+### 2. Add the code files
 
-Your bookmarked URL stays the same — just reload the page to see the updated app.
+The pre-built files are in the [`release/`](release/) folder of this repository.
 
----
+**Replace Code.gs:**
 
-## Developer Setup
+1. In the Apps Script editor, you'll see a file called `Code.gs` with a default `myFunction()` in it.
+2. Select all the text and delete it.
+3. Open [`release/Code.gs`](release/Code.gs) in this repository and copy its entire contents.
+4. Paste into the empty `Code.gs` file in the editor.
 
-If you want to modify the code, run tests, or set up automated deployments, use the developer workflow below.
+**Add index.html:**
+
+1. In the left sidebar, click the **+** button next to "Files".
+2. Select **HTML**.
+3. Name it `index` (it will become `index.html`).
+4. Delete the default HTML content.
+5. Open [`release/index.html`](release/index.html) in this repository and copy its entire contents.
+6. Paste into the empty `index.html` file.
+
+**Update appsscript.json:**
+
+1. In the left sidebar, click the **gear icon** (Project Settings).
+2. Check the box **"Show 'appsscript.json' manifest file in editor"**.
+3. Go back to the Editor (left sidebar, `< >` icon).
+4. Click on `appsscript.json` in the file list.
+5. Select all and replace with the contents of [`release/appsscript.json`](release/appsscript.json).
+
+### 3. Enable the Calendar API
+
+1. In the left sidebar, click the **+** next to **Services**.
+2. Find **Google Calendar API** in the list.
+3. Click **Add**.
+
+### 4. Deploy as a web app
+
+1. Click **Deploy** > **New deployment**.
+2. Click the **gear icon** next to "Select type" and choose **Web app**.
+3. Fill in:
+   - **Description**: "Time Slot Generator" (or anything you like).
+   - **Execute as**: "Me" (your email address).
+   - **Who has access**: "Only myself".
+4. Click **Deploy**.
+5. Click **Authorize access** when prompted.
+6. In the popup, select your Google account.
+7. If you see "Google hasn't verified this app", click **Advanced** → **Go to Time Slot Generator (unsafe)** — this is your own script, so it's safe.
+8. Click **Allow** to grant calendar read access.
+9. Copy the **Web app URL** shown — bookmark this link.
+
+### 5. Use it
+
+Open the Web app URL. The app reads your Google Calendar, computes your free time slots, and lets you copy formatted availability text to your clipboard.
+
+### Updating to a new version
+
+Your settings are saved automatically and carry over across updates.
+
+1. Open your Apps Script project at [script.google.com](https://script.google.com).
+2. Replace `Code.gs` and `index.html` by copying the latest contents from the `release/` folder (same as steps 2 above).
+3. Click **Deploy** → **Manage deployments**.
+4. Click the **pencil icon** on your existing deployment, change **Version** to "New version", click **Deploy**.
+
+Your bookmarked URL stays the same — reload to see the updated app.
+
+</details>
+
+## Developer setup
 
 ### Prerequisites
 
-- **Node.js** 18+ and npm
-- A **Google account** with Google Calendar
+- Node.js 18+ and npm.
+- A Google account with Google Calendar.
 
 ### Install
 
@@ -195,72 +166,82 @@ cd gcal-timeslot-generator
 npm install
 ```
 
-### Configure clasp
+### SPA dev workflow
+
+One-time setup (Cloud Console + GitHub Pages) is documented end-to-end in [docs/SETUP.md](docs/SETUP.md). The partial-automation helper:
 
 ```bash
-cp .clasp.json.example .clasp.json
+./scripts/setup-gcp.sh    # creates GCP project, enables Calendar API
 ```
 
-Edit `.clasp.json` and replace `YOUR_SCRIPT_ID_HERE` with your Script ID (found under Project Settings > IDs in the Apps Script editor):
-
-```json
-{
-  "scriptId": "your-actual-script-id-here",
-  "rootDir": "dist"
-}
-```
-
-### Authenticate
+After running it, continue with the manual Console steps in [docs/SETUP.md](docs/SETUP.md).
 
 ```bash
-npm run login
+npm run dev              # Vite dev server on 0.0.0.0:5173
+npm run check:web        # TypeScript check
+npm run build:web        # Production build → dist-web/
+npm run preview:web      # Preview the production build
 ```
 
-### Build, Push, and Deploy
+Ship with `git push origin main:production`. The `.github/workflows/deploy-pages.yml` workflow builds the SPA (injecting the `VITE_GOOGLE_CLIENT_ID` repo secret) and deploys `dist-web/` to GitHub Pages.
+
+### Apps Script dev workflow
 
 ```bash
-npm run deploy
+cp .clasp.json.example .clasp.json   # then fill in your scriptId
+npm run login                        # clasp auth
+npm run build                        # Rollup bundle → dist/
+npm run push                         # Build + push to Apps Script (HEAD)
+npm run deploy                       # Full cycle: build + push + new version + update deployment
 ```
-
-This compiles TypeScript, bundles with Rollup, pushes to Apps Script, creates a new version, and updates the web app deployment.
 
 ### Scripts
 
 | Command | Description |
 |---------|-------------|
-| `npm test` | Run Jest unit tests (131 tests) |
-| `npm run build` | Compile and bundle to `dist/` and `release/` |
-| `npm run push` | Build and push to Apps Script |
-| `npm run deploy` | Build, push, create version, update deployment |
-| `npm run watch` | Watch mode for development |
-| `npm run login` | Authenticate clasp with Google |
-| `npm run open` | Open the web app in your browser |
+| `npm test` | Jest unit tests (131 tests, pure logic only) |
+| `npm run check:web` | TypeScript check for SPA sources |
+| `npm run dev` | Vite dev server for the SPA |
+| `npm run build:web` | Production SPA build |
+| `npm run preview:web` | Preview built SPA |
+| `npm run build` | Apps Script Rollup build |
+| `npm run push` | Apps Script clasp push (HEAD only) |
+| `npm run deploy` | Apps Script full deploy (version + update) |
+| `npm run watch` | Apps Script Rollup watch |
+| `npm run login` | clasp auth |
+| `npm run open` | Open deployed Apps Script web app |
 
-### Project Structure
+### Project structure
 
 ```
 src/
-  server/
-    Code.ts             Entry point (doGet, getSlots, getCalendars)
-    SlotCalculator.ts   Core availability computation
-    Formatter.ts        Text formatting (bullets, compact)
-  shared/
-    types.ts            TypeScript interfaces
+  lib/                   # Pure logic shared between both builds
+    types.ts
+    slot-calculator.ts
+    formatter.ts
+  server/                # Apps Script build only
+    Code.ts              # GAS entry points (doGet, getCalendars, …)
+    calendar-service.ts  # Wraps Calendar.Events.list + CalendarApp
+  web/                   # SPA build only (Vite root)
+    index.html, main.ts, auth.ts, calendar-api.ts, ui.ts, settings-storage.ts
   pages/
-    index.html          Web UI (HTML + CSS + JS)
+    index.html           # GAS UI (served by HtmlService)
 tests/
-  server/               Jest unit tests
+  server/                # Jest tests — all pure logic
 scripts/
-  deploy.js             Deployment automation
-release/                Pre-built files for non-developer install
-dist/                   Build output (pushed to Apps Script)
+  deploy.js              # Apps Script deploy automation
+release/                 # Pre-built Apps Script files for copy-paste install
 ```
 
 ### Architecture
 
-The app runs as a Google Apps Script web app. `Code.ts` is the entry point. The build process (Rollup) bundles all server TypeScript into a single `Code.gs` file and strips ES module syntax (Apps Script runs everything in a shared global scope). The `index.html` is served by `HtmlService`.
+Pure compute (slot calculation, fatigue algorithm, formatting) lives in `src/lib/` and is imported by both builds. The **SPA** (`src/web/`) uses Google Identity Services for browser-side OAuth and calls the Calendar v3 REST API directly with a Bearer token. The **Apps Script** build (`src/server/`) calls the Advanced Calendar Service (`Calendar.Events.list`) from the GAS runtime.
 
-Pure computation functions (`mergeBusyBlocks`, `computeFreeSlotsWithFatigue`, `filterPastSlots`, `roundSlotStarts`) are exported and unit-tested with Jest — 131 tests including a 381-permutation sweep validated against a reference oracle. The `getAvailableSlots` wrapper calls the Google Calendar API via the Advanced Calendar Service and is not unit-tested (requires the GAS runtime).
+The build process for each target:
+- **SPA**: Vite bundles `src/web/` + imported `src/lib/` → `dist-web/` with hashed asset names; GitHub Pages serves it.
+- **Apps Script**: Rollup bundles `src/server/Code.ts` + imported `src/lib/` → `dist/Code.gs` (single file — GAS has no module system, so a custom plugin strips `export`/`import`).
+
+Pure functions (`mergeBusyBlocks`, `computeFreeSlotsWithFatigue`, `computeDaySlots`, `filterPastSlots`, `roundSlotStarts`) are exported and unit-tested with Jest — 131 tests including a 381-permutation sweep validated against a reference oracle. Thin runtime wrappers (`getAvailableSlots` for GAS, `loadSlots` for SPA) are not unit-tested — they depend on their respective runtimes.
 
 ### Running Tests
 
@@ -270,20 +251,16 @@ npm test
 
 Tests cover all pure computation and formatting functions. `jest.useFakeTimers()` is used for date-dependent logic.
 
----
+## Distribution notes
 
-## Distribution Options
+The SPA relies on the **`calendar.readonly`** OAuth scope, which Google classifies as **sensitive** (not restricted — that's a different tier that requires a paid third-party security assessment).
 
-### Current: Copy-Paste Install
+Sensitive-scope verification by Google is **free** but bureaucratic: OAuth consent screen with privacy policy, homepage, and terms of service URLs, a demo video, a justification letter, and a ~4–8 week back-and-forth with their review team. Until that's done, the SPA stays in **Testing** publishing status, which:
 
-The `release/` folder contains pre-built files that anyone can copy into a new Apps Script project via the browser. No developer tools required. See [Quick Install](#quick-install-no-developer-tools-required) above.
+- Caps the user base at 100 allowlisted accounts (add each email in Google Cloud Console → OAuth consent screen → Test users).
+- Shows the "Google hasn't verified this app" warning to everyone on first sign-in.
+- Expires refresh tokens every 7 days, requiring users to re-sign-in via the button.
 
-### Future: Google Workspace Marketplace
+Moving to Production (post-verification) removes all three of those. No code changes needed — it's a Cloud Console flip.
 
-Publishing to the [Google Workspace Marketplace](https://workspace.google.com/marketplace) would allow one-click installation. However, this app requires calendar read access, which Google classifies as a **restricted OAuth scope**. Restricted scopes require:
-
-- A Google Cloud project with OAuth consent screen
-- A third-party security assessment (CASA Tier 2), which costs **$15,000 - $75,000**
-- Google's app review process
-
-This makes Marketplace publishing impractical for a free personal tool. The copy-paste install is the recommended distribution method.
+**Google Workspace Marketplace** listing is a separate path that also requires verification plus some marketplace-specific UX and a listing page. Not pursued here because the static-site + direct sign-in route delivers the same "click to use" UX without the marketplace overhead.
