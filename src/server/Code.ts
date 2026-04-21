@@ -1,6 +1,6 @@
-import type { SlotOptions, FormatStyle, DaySlots, CalendarInfo } from "../shared/types";
-import { getAvailableSlots } from "./SlotCalculator";
-import { formatSlots } from "./Formatter";
+import type { SlotOptions, FormatStyle, DaySlots, CalendarInfo } from "../lib/types";
+import { getAvailableSlots } from "./calendar-service";
+import { formatSlots } from "../lib/formatter";
 
 export function doGet(): GoogleAppsScript.HTML.HtmlOutput {
   return HtmlService.createHtmlOutputFromFile("index")

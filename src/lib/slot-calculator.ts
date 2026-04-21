@@ -1,4 +1,4 @@
-import type { TimeSlot, DaySlots, SlotOptions, BusyBlock } from "../shared/types";
+import type { TimeSlot, DaySlots, SlotOptions, BusyBlock } from "./types";
 
 export function getDefaultSlotOptions(): SlotOptions {
   return {
@@ -52,40 +52,6 @@ export function formatDateKey(date: Date): string {
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
-}
-
-/** Fetch all events for a calendar in one Advanced Calendar Service call. */
-function fetchCalendarEvents(
-  calendarId: string,
-  rangeStart: Date,
-  rangeEnd: Date,
-): BusyBlock[] {
-  const blocks: BusyBlock[] = [];
-  let pageToken: string | undefined;
-  do {
-    const response = Calendar.Events!.list(calendarId, {
-      timeMin: rangeStart.toISOString(),
-      timeMax: rangeEnd.toISOString(),
-      singleEvents: true,
-      maxResults: 2500,
-      pageToken: pageToken || undefined,
-    });
-    for (const item of response.items || []) {
-      if (item.status === "cancelled") continue;
-      if (item.attendees?.some((a: GoogleAppsScript.Calendar.Schema.EventAttendee) => a.self && a.responseStatus === "declined")) continue;
-      const isAllDay = !!item.start?.date;
-      if (isAllDay) {
-        const title = (item.summary || "").toLowerCase();
-        const noGuests = !item.attendees || item.attendees.every((a: GoogleAppsScript.Calendar.Schema.EventAttendee) => a.self);
-        if (title.includes("holiday") && noGuests) continue;
-      }
-      const startMs = new Date(isAllDay ? item.start!.date! : item.start!.dateTime!).getTime();
-      const endMs = new Date(isAllDay ? item.end!.date! : item.end!.dateTime!).getTime();
-      blocks.push({ start: startMs, end: endMs });
-    }
-    pageToken = response.nextPageToken ?? undefined;
-  } while (pageToken);
-  return blocks;
 }
 
 export function mergeBusyBlocks(blocks: BusyBlock[]): BusyBlock[] {
@@ -525,27 +491,13 @@ export function roundSlotStarts(
   return out;
 }
 
-function resolveCalendars(calendarIds?: string[]): GoogleAppsScript.Calendar.Calendar[] {
-  const calendars: GoogleAppsScript.Calendar.Calendar[] = [];
-  if (calendarIds && calendarIds.length > 0) {
-    for (const id of calendarIds) {
-      const cal = CalendarApp.getCalendarById(id);
-      if (cal) calendars.push(cal);
-    }
-  }
-  if (calendars.length === 0) {
-    calendars.push(CalendarApp.getDefaultCalendar());
-  }
-  return calendars;
-}
-
 /**
  * Intersect two sets of TimeSlots. The intersection of [a1,b1] and [a2,b2]
  * is [max(a1,a2), min(b1,b2)] when non-empty, carrying the tighter
  * maxMinutes constraint. Slots shorter than minMinutes after intersection
  * are dropped.
  */
-function intersectSlotSets(a: TimeSlot[], b: TimeSlot[], minMinutes: number): TimeSlot[] {
+export function intersectSlotSets(a: TimeSlot[], b: TimeSlot[], minMinutes: number): TimeSlot[] {
   const out: TimeSlot[] = [];
   for (const s1 of a) {
     const s1s = new Date(s1.start).getTime();
@@ -570,10 +522,43 @@ function intersectSlotSets(a: TimeSlot[], b: TimeSlot[], minMinutes: number): Ti
   return out;
 }
 
-export function getAvailableSlots(options?: Partial<SlotOptions>): DaySlots[] {
-  const opts = { ...getDefaultSlotOptions(), ...options };
-  const calendars = resolveCalendars(opts.calendarIds);
+/**
+ * Compute the event-fetch window implied by these options: business days,
+ * rangeStart (first day at opts.startHour), rangeEnd (last day at opts.endHour).
+ * Callers use this to know what date range to query the Calendar API for,
+ * then pass the fetched events into computeDaySlots along with the same
+ * businessDays array.
+ */
+export function computeFetchRange(opts: SlotOptions): {
+  businessDays: Date[];
+  rangeStart: Date;
+  rangeEnd: Date;
+} {
   const businessDays = getNextBusinessDays(opts.numDays, opts.includeToday, opts.endHour);
+  if (businessDays.length === 0) {
+    const fallback = new Date();
+    return { businessDays: [], rangeStart: fallback, rangeEnd: fallback };
+  }
+  const rangeStart = new Date(businessDays[0]);
+  rangeStart.setHours(opts.startHour, 0, 0, 0);
+  const rangeEnd = new Date(businessDays[businessDays.length - 1]);
+  rangeEnd.setHours(opts.endHour, 0, 0, 0);
+  return { businessDays, rangeStart, rangeEnd };
+}
+
+/**
+ * Pure day-by-day slot computation. Given events grouped by calendar
+ * (already fetched by the caller), produce the final DaySlots[] with
+ * fatigue-aware slots, past-slot filtering for today, and start rounding
+ * applied. Shared between the GAS and SPA wrappers — they differ only
+ * in how they fetch events and resolve calendar IDs.
+ */
+export function computeDaySlots(
+  eventsByCalendar: BusyBlock[][],
+  businessDays: Date[],
+  opts: SlotOptions,
+  now: Date = new Date(),
+): DaySlots[] {
   const result: DaySlots[] = [];
   if (businessDays.length === 0) return result;
 
@@ -583,18 +568,8 @@ export function getAvailableSlots(options?: Partial<SlotOptions>): DaySlots[] {
     minMinutes: opts.minMinutes,
   };
 
-  // Fetch all events via Advanced Calendar Service — one HTTP round-trip
-  // per calendar for the entire date range. All event data (times, status,
-  // attendees) arrives as JSON, avoiding the per-property GAS API calls
-  // that made CalendarApp.getEvents() slow (~100ms per property × events).
-  const rangeStart = new Date(businessDays[0]);
-  rangeStart.setHours(opts.startHour, 0, 0, 0);
-  const rangeEnd = new Date(businessDays[businessDays.length - 1]);
-  rangeEnd.setHours(opts.endHour, 0, 0, 0);
-
-  const eventsByCalendar: BusyBlock[][] = calendars.map((calendar) =>
-    fetchCalendarEvents(calendar.getId(), rangeStart, rangeEnd),
-  );
+  const today = new Date(now);
+  today.setHours(0, 0, 0, 0);
 
   for (const day of businessDays) {
     const dayStart = new Date(day);
@@ -630,9 +605,6 @@ export function getAvailableSlots(options?: Partial<SlotOptions>): DaySlots[] {
       slots = computeFreeSlotsWithFatigue(allBlocks, dayStartMs, dayEndMs, fatigueOpts);
     }
 
-    const now = new Date();
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
     if (day.getTime() === today.getTime()) {
       slots = filterPastSlots(slots, now.getTime());
     }

@@ -47,39 +47,6 @@ function formatDateKey(date) {
     const d = String(date.getDate()).padStart(2, "0");
     return `${y}-${m}-${d}`;
 }
-/** Fetch all events for a calendar in one Advanced Calendar Service call. */
-function fetchCalendarEvents(calendarId, rangeStart, rangeEnd) {
-    var _a, _b, _c;
-    const blocks = [];
-    let pageToken;
-    do {
-        const response = Calendar.Events.list(calendarId, {
-            timeMin: rangeStart.toISOString(),
-            timeMax: rangeEnd.toISOString(),
-            singleEvents: true,
-            maxResults: 2500,
-            pageToken: pageToken || undefined,
-        });
-        for (const item of response.items || []) {
-            if (item.status === "cancelled")
-                continue;
-            if ((_a = item.attendees) === null || _a === void 0 ? void 0 : _a.some((a) => a.self && a.responseStatus === "declined"))
-                continue;
-            const isAllDay = !!((_b = item.start) === null || _b === void 0 ? void 0 : _b.date);
-            if (isAllDay) {
-                const title = (item.summary || "").toLowerCase();
-                const noGuests = !item.attendees || item.attendees.every((a) => a.self);
-                if (title.includes("holiday") && noGuests)
-                    continue;
-            }
-            const startMs = new Date(isAllDay ? item.start.date : item.start.dateTime).getTime();
-            const endMs = new Date(isAllDay ? item.end.date : item.end.dateTime).getTime();
-            blocks.push({ start: startMs, end: endMs });
-        }
-        pageToken = (_c = response.nextPageToken) !== null && _c !== void 0 ? _c : undefined;
-    } while (pageToken);
-    return blocks;
-}
 function mergeBusyBlocks(blocks) {
     if (blocks.length === 0)
         return [];
@@ -429,20 +396,6 @@ function roundSlotStarts(slots, roundMinutes, minMinutes) {
     }
     return out;
 }
-function resolveCalendars(calendarIds) {
-    const calendars = [];
-    if (calendarIds && calendarIds.length > 0) {
-        for (const id of calendarIds) {
-            const cal = CalendarApp.getCalendarById(id);
-            if (cal)
-                calendars.push(cal);
-        }
-    }
-    if (calendars.length === 0) {
-        calendars.push(CalendarApp.getDefaultCalendar());
-    }
-    return calendars;
-}
 /**
  * Intersect two sets of TimeSlots. The intersection of [a1,b1] and [a2,b2]
  * is [max(a1,a2), min(b1,b2)] when non-empty, carrying the tighter
@@ -476,10 +429,33 @@ function intersectSlotSets(a, b, minMinutes) {
     }
     return out;
 }
-function getAvailableSlots(options) {
-    const opts = { ...getDefaultSlotOptions(), ...options };
-    const calendars = resolveCalendars(opts.calendarIds);
+/**
+ * Compute the event-fetch window implied by these options: business days,
+ * rangeStart (first day at opts.startHour), rangeEnd (last day at opts.endHour).
+ * Callers use this to know what date range to query the Calendar API for,
+ * then pass the fetched events into computeDaySlots along with the same
+ * businessDays array.
+ */
+function computeFetchRange(opts) {
     const businessDays = getNextBusinessDays(opts.numDays, opts.includeToday, opts.endHour);
+    if (businessDays.length === 0) {
+        const fallback = new Date();
+        return { businessDays: [], rangeStart: fallback, rangeEnd: fallback };
+    }
+    const rangeStart = new Date(businessDays[0]);
+    rangeStart.setHours(opts.startHour, 0, 0, 0);
+    const rangeEnd = new Date(businessDays[businessDays.length - 1]);
+    rangeEnd.setHours(opts.endHour, 0, 0, 0);
+    return { businessDays, rangeStart, rangeEnd };
+}
+/**
+ * Pure day-by-day slot computation. Given events grouped by calendar
+ * (already fetched by the caller), produce the final DaySlots[] with
+ * fatigue-aware slots, past-slot filtering for today, and start rounding
+ * applied. Shared between the GAS and SPA wrappers — they differ only
+ * in how they fetch events and resolve calendar IDs.
+ */
+function computeDaySlots(eventsByCalendar, businessDays, opts, now = new Date()) {
     const result = [];
     if (businessDays.length === 0)
         return result;
@@ -488,15 +464,8 @@ function getAvailableSlots(options) {
         minBreakMinutes: opts.minBreakMinutes,
         minMinutes: opts.minMinutes,
     };
-    // Fetch all events via Advanced Calendar Service — one HTTP round-trip
-    // per calendar for the entire date range. All event data (times, status,
-    // attendees) arrives as JSON, avoiding the per-property GAS API calls
-    // that made CalendarApp.getEvents() slow (~100ms per property × events).
-    const rangeStart = new Date(businessDays[0]);
-    rangeStart.setHours(opts.startHour, 0, 0, 0);
-    const rangeEnd = new Date(businessDays[businessDays.length - 1]);
-    rangeEnd.setHours(opts.endHour, 0, 0, 0);
-    const eventsByCalendar = calendars.map((calendar) => fetchCalendarEvents(calendar.getId(), rangeStart, rangeEnd));
+    const today = new Date(now);
+    today.setHours(0, 0, 0, 0);
     for (const day of businessDays) {
         const dayStart = new Date(day);
         dayStart.setHours(opts.startHour, 0, 0, 0);
@@ -528,9 +497,6 @@ function getAvailableSlots(options) {
             const allBlocks = blocksByCalendar.flat();
             slots = computeFreeSlotsWithFatigue(allBlocks, dayStartMs, dayEndMs, fatigueOpts);
         }
-        const now = new Date();
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
         if (day.getTime() === today.getTime()) {
             slots = filterPastSlots(slots, now.getTime());
         }
@@ -544,6 +510,63 @@ function getAvailableSlots(options) {
         }
     }
     return result;
+}
+
+/** Fetch all events for a calendar in one Advanced Calendar Service call. */
+function fetchCalendarEvents(calendarId, rangeStart, rangeEnd) {
+    var _a, _b, _c;
+    const blocks = [];
+    let pageToken;
+    do {
+        const response = Calendar.Events.list(calendarId, {
+            timeMin: rangeStart.toISOString(),
+            timeMax: rangeEnd.toISOString(),
+            singleEvents: true,
+            maxResults: 2500,
+            pageToken: pageToken || undefined,
+        });
+        for (const item of response.items || []) {
+            if (item.status === "cancelled")
+                continue;
+            if ((_a = item.attendees) === null || _a === void 0 ? void 0 : _a.some((a) => a.self && a.responseStatus === "declined"))
+                continue;
+            const isAllDay = !!((_b = item.start) === null || _b === void 0 ? void 0 : _b.date);
+            if (isAllDay) {
+                const title = (item.summary || "").toLowerCase();
+                const noGuests = !item.attendees || item.attendees.every((a) => a.self);
+                if (title.includes("holiday") && noGuests)
+                    continue;
+            }
+            const startMs = new Date(isAllDay ? item.start.date : item.start.dateTime).getTime();
+            const endMs = new Date(isAllDay ? item.end.date : item.end.dateTime).getTime();
+            blocks.push({ start: startMs, end: endMs });
+        }
+        pageToken = (_c = response.nextPageToken) !== null && _c !== void 0 ? _c : undefined;
+    } while (pageToken);
+    return blocks;
+}
+function resolveCalendars(calendarIds) {
+    const calendars = [];
+    if (calendarIds && calendarIds.length > 0) {
+        for (const id of calendarIds) {
+            const cal = CalendarApp.getCalendarById(id);
+            if (cal)
+                calendars.push(cal);
+        }
+    }
+    if (calendars.length === 0) {
+        calendars.push(CalendarApp.getDefaultCalendar());
+    }
+    return calendars;
+}
+function getAvailableSlots(options) {
+    const opts = { ...getDefaultSlotOptions(), ...options };
+    const { businessDays, rangeStart, rangeEnd } = computeFetchRange(opts);
+    if (businessDays.length === 0)
+        return [];
+    const calendars = resolveCalendars(opts.calendarIds);
+    const eventsByCalendar = calendars.map((calendar) => fetchCalendarEvents(calendar.getId(), rangeStart, rangeEnd));
+    return computeDaySlots(eventsByCalendar, businessDays, opts);
 }
 
 function formatTime(isoString) {

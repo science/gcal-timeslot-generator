@@ -2,8 +2,8 @@ import {
   formatTime,
   formatSlotsBullets,
   formatSlotsCompact,
-} from "../../src/server/Formatter";
-import type { DaySlots } from "../../src/shared/types";
+} from "../../src/lib/formatter";
+import type { DaySlots } from "../../src/lib/types";
 
 // Helper: create ISO string at a specific hour/minute (local time)
 function iso(hour: number, minute = 0): string {

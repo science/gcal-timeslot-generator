@@ -25,8 +25,8 @@
 //      Standalone minMinutes slots stay unannotated because they can't
 //      be confused for part of a longer bookable window.
 
-import { computeFreeSlotsWithFatigue } from "../../src/server/SlotCalculator";
-import type { BusyBlock, TimeSlot } from "../../src/shared/types";
+import { computeFreeSlotsWithFatigue } from "../../src/lib/slot-calculator";
+import type { BusyBlock, TimeSlot } from "../../src/lib/types";
 
 const RULES = { maxContinuousMinutes: 120, minBreakMinutes: 30, minMinutes: 30 };
 

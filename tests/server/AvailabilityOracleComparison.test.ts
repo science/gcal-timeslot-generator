@@ -12,8 +12,8 @@
 // Each fixture becomes an `it` so Jest shows precisely which pattern
 // fails. A summary block at the end prints totals across all fixtures.
 
-import { computeFreeSlotsWithFatigue } from "../../src/server/SlotCalculator";
-import type { BusyBlock, TimeSlot } from "../../src/shared/types";
+import { computeFreeSlotsWithFatigue } from "../../src/lib/slot-calculator";
+import type { BusyBlock, TimeSlot } from "../../src/lib/types";
 import {
   compareWithOracle,
   DEFAULT_RULES,

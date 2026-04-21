@@ -6,7 +6,7 @@ import {
   enumerateValidMeetings,
   DEFAULT_RULES,
 } from "./availabilityOracle";
-import type { BusyBlock } from "../../src/shared/types";
+import type { BusyBlock } from "../../src/lib/types";
 
 function t(h: number, m = 0): number {
   return new Date(2026, 0, 5, h, m).getTime();

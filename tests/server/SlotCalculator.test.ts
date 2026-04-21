@@ -5,8 +5,8 @@ import {
   formatDateKey,
   filterPastSlots,
   roundSlotStarts,
-} from "../../src/server/SlotCalculator";
-import type { BusyBlock } from "../../src/shared/types";
+} from "../../src/lib/slot-calculator";
+import type { BusyBlock } from "../../src/lib/types";
 
 // Helper: ms timestamp for a time on a given date
 function ms(hour: number, minute = 0): number {

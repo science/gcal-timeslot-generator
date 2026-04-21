@@ -1,4 +1,4 @@
-import type { DaySlots, FormatStyle, TimeSlot } from "../shared/types";
+import type { DaySlots, FormatStyle, TimeSlot } from "./types";
 
 export function formatTime(isoString: string): string {
   const date = new Date(isoString);

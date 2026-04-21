@@ -31,7 +31,7 @@
 //   5. The set of offered slots is complete iff every valid meeting
 //      (duration ≥ minMinutes, on the grid) is covered by some slot.
 
-import type { BusyBlock, TimeSlot } from "../../src/shared/types";
+import type { BusyBlock, TimeSlot } from "../../src/lib/types";
 
 export interface FatigueRules {
   maxContinuousMinutes: number;

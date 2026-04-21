@@ -13,7 +13,7 @@
 //      interactions (single long block, two-block bookend, triple
 //      sandwich, etc.).
 
-import type { BusyBlock } from "../../src/shared/types";
+import type { BusyBlock } from "../../src/lib/types";
 
 export interface Fixture {
   name: string;
